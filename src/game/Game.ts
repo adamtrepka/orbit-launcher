@@ -261,13 +261,19 @@ export class Game {
       finalFuel: result.finalState.fuel,
     };
 
+    // Load the full trajectory into the trail (hidden initially, revealed progressively)
+    this.rocket.loadTrajectory(this.launchTrajectory);
+
     // Show rocket and HUD
     this.rocket.show();
     this.hud.show();
 
-    // Adapt animation speed to trajectory length (aim for ~5 seconds of animation at 60fps)
-    const targetFrames = 300; // ~5 seconds at 60fps
+    // Adapt animation speed to trajectory length (aim for ~6 seconds of animation at 60fps)
+    const targetFrames = 360; // ~6 seconds at 60fps
     this.launchAnimSpeed = Math.max(3, Math.ceil(this.launchTrajectory.length / targetFrames));
+
+    // Disable OrbitControls during launch so camera follow works unimpeded
+    this.sceneManager.controls.enabled = false;
   }
 
   private update(dt: number, elapsed: number): void {
@@ -288,15 +294,23 @@ export class Game {
     // Step through trajectory points
     const stepsPerFrame = this.launchAnimSpeed;
     for (let i = 0; i < stepsPerFrame && this.launchAnimIndex < this.launchTrajectory.length; i++) {
-      const pos = this.launchTrajectory[this.launchAnimIndex];
-      this.rocket.setPosition(pos, this.getVelocityAt(this.launchAnimIndex));
-      this.rocket.addTrailPoint(pos);
+      this.launchAnimIndex++;
+    }
+
+    // Position rocket at current trajectory point
+    const idx = Math.min(this.launchAnimIndex, this.launchTrajectory.length) - 1;
+    if (idx >= 0) {
+      const pos = this.launchTrajectory[idx];
+      this.rocket.setPosition(pos, this.getVelocityAt(idx));
+
+      // Progressively reveal the trail up to current position
+      this.rocket.revealTrail(this.launchAnimIndex);
 
       // Update HUD
       const alt = pos.length() - 6371;
       const vel =
-        this.launchAnimIndex > 0
-          ? pos.clone().sub(this.launchTrajectory[this.launchAnimIndex - 1]).length() * 0.2
+        idx > 0
+          ? pos.clone().sub(this.launchTrajectory[idx - 1]).length() * 0.2
           : 0;
       const fuelEst = this.launchResult
         ? Math.max(0, 1 - this.launchAnimIndex / this.launchTrajectory.length * (1 - this.launchResult.finalFuel))
@@ -308,27 +322,54 @@ export class Game {
             ? 'COAST'
             : 'ORBIT';
       this.hud.update(alt, vel * 1000, fuelEst, phase);
-
-      this.launchAnimIndex++;
     }
 
-    // Follow rocket with camera -- pull back as altitude increases
-    if (this.launchAnimIndex < this.launchTrajectory.length) {
-      const rocketPos = this.rocket.group.position;
-      const distFromCenter = rocketPos.length();
-      // Camera offset scales with distance from Earth
-      const offsetScale = Math.max(0.3, distFromCenter * 0.4);
-      const camDir = rocketPos.clone().normalize();
-      const perpDir = new THREE.Vector3(-camDir.z, 0.3, camDir.x).normalize();
-      const targetCamPos = rocketPos.clone().add(perpDir.multiplyScalar(offsetScale));
-      this.sceneManager.camera.position.lerp(targetCamPos, 0.03);
-      this.sceneManager.camera.lookAt(0, 0, 0);
-    }
+    // Camera follow: track the rocket, pulling back as altitude increases
+    this.updateLaunchCamera();
 
     // Animation complete
     if (this.launchAnimIndex >= this.launchTrajectory.length) {
       this.finishLaunch();
     }
+  }
+
+  /**
+   * Camera follow during launch animation.
+   *
+   * Strategy: position the camera on a perpendicular offset from the rocket,
+   * looking at a point between the rocket and Earth center so both stay in frame.
+   * The offset grows as the rocket gets farther from Earth.
+   */
+  private updateLaunchCamera(): void {
+    const rocketPos = this.rocket.group.position;
+    if (rocketPos.lengthSq() < 0.001) return;
+
+    const distFromCenter = rocketPos.length();
+
+    // Camera offset scales with distance from Earth center
+    // Close to Earth: tight follow. Far out: pull back to see the orbit forming
+    const offsetScale = Math.max(0.3, distFromCenter * 0.5);
+
+    // Build a perpendicular offset direction
+    const radial = rocketPos.clone().normalize();
+    // Cross with world-up to get a tangent, then cross again for a stable perp
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const tangent = new THREE.Vector3().crossVectors(worldUp, radial);
+    if (tangent.lengthSq() < 0.001) {
+      tangent.set(1, 0, 0); // fallback if radial is along Y
+    }
+    tangent.normalize();
+    // Mix in some "up" so we're not perfectly edge-on
+    const perpDir = tangent.clone().multiplyScalar(0.8).add(radial.clone().multiplyScalar(0.4)).normalize();
+
+    const targetCamPos = rocketPos.clone().add(perpDir.multiplyScalar(offsetScale));
+
+    // Look at a blend between rocket and Earth center — keeps both in frame
+    const lookTarget = rocketPos.clone().multiplyScalar(0.3); // 30% toward rocket, 70% toward origin
+
+    // Smooth follow — faster lerp than before so camera actually keeps up
+    this.sceneManager.camera.position.lerp(targetCamPos, 0.08);
+    this.sceneManager.camera.lookAt(lookTarget);
   }
 
   private getVelocityAt(index: number): THREE.Vector3 {
@@ -347,6 +388,14 @@ export class Game {
     this.state = GameState.RESULT;
     this.hud.hide();
     this.launchPanel.hide();
+
+    // Reveal the entire trail so the player can see the full trajectory
+    this.rocket.revealFullTrail();
+
+    // Re-enable OrbitControls so the player can rotate around the result
+    this.sceneManager.controls.enabled = true;
+    // Reset the controls target to Earth center
+    this.sceneManager.controls.target.set(0, 0, 0);
 
     const target = this.currentMission.params;
     const achieved = this.launchResult.orbitalElements;

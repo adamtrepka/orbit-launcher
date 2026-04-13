@@ -9,8 +9,9 @@ export class Rocket {
   public group: THREE.Group;
   public trail: THREE.Line;
 
-  private trailPositions: number[] = [];
   private trailGeometry: THREE.BufferGeometry;
+  private trailVertexCount: number = 0;
+  private trailRevealCount: number = 0;
   private exhaustParticles: THREE.Points | null = null;
   private particlePositions: Float32Array;
   private particleVelocities: Float32Array;
@@ -45,12 +46,12 @@ export class Rocket {
     glow.name = 'engineGlow';
     this.group.add(glow);
 
-    // Trail line
+    // Trail line (geometry will be set when trajectory is loaded)
     this.trailGeometry = new THREE.BufferGeometry();
     const trailMat = new THREE.LineBasicMaterial({
       color: 0x44aaff,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.6,
     });
     this.trail = new THREE.Line(this.trailGeometry, trailMat);
 
@@ -96,17 +97,43 @@ export class Rocket {
   }
 
   /**
-   * Add current position to the trajectory trail
+   * Load the full trajectory into the trail geometry up-front.
+   * The trail is initially hidden; call revealTrail() to progressively show it.
    */
-  addTrailPoint(posKm: THREE.Vector3): void {
-    const sp = posKm.clone().multiplyScalar(kmToScene(1));
-    this.trailPositions.push(sp.x, sp.y, sp.z);
+  loadTrajectory(trajectoryKm: THREE.Vector3[]): void {
+    const scale = kmToScene(1);
+    const positions = new Float32Array(trajectoryKm.length * 3);
+    for (let i = 0; i < trajectoryKm.length; i++) {
+      positions[i * 3] = trajectoryKm[i].x * scale;
+      positions[i * 3 + 1] = trajectoryKm[i].y * scale;
+      positions[i * 3 + 2] = trajectoryKm[i].z * scale;
+    }
 
-    const positions = new Float32Array(this.trailPositions);
     this.trailGeometry.setAttribute(
       'position',
       new THREE.BufferAttribute(positions, 3)
     );
+    this.trailVertexCount = trajectoryKm.length;
+    this.trailRevealCount = 0;
+
+    // Hide all vertices initially
+    this.trailGeometry.setDrawRange(0, 0);
+  }
+
+  /**
+   * Reveal the trail up to a given trajectory index.
+   */
+  revealTrail(upToIndex: number): void {
+    this.trailRevealCount = Math.min(upToIndex, this.trailVertexCount);
+    this.trailGeometry.setDrawRange(0, this.trailRevealCount);
+  }
+
+  /**
+   * Reveal the entire trail at once.
+   */
+  revealFullTrail(): void {
+    this.trailRevealCount = this.trailVertexCount;
+    this.trailGeometry.setDrawRange(0, this.trailVertexCount);
   }
 
   /**
@@ -154,11 +181,13 @@ export class Rocket {
   }
 
   resetTrail(): void {
-    this.trailPositions = [];
+    this.trailVertexCount = 0;
+    this.trailRevealCount = 0;
     this.trailGeometry.setAttribute(
       'position',
       new THREE.BufferAttribute(new Float32Array(0), 3)
     );
+    this.trailGeometry.setDrawRange(0, 0);
   }
 
   reset(): void {
