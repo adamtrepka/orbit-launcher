@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbit Launcher</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+      <!-- Welcome Panel -->
+      <div id="welcome-panel" class="panel">
+        <div class="welcome-title">ORBIT LAUNCHER</div>
+        <div class="welcome-subtitle">Place satellites into orbit</div>
+        <div class="welcome-howto">
+          <h3>HOW TO PLAY</h3>
+          <ol>
+            <li><strong>Read the mission</strong> -- you'll get a target orbit type with specific altitude, inclination, and eccentricity to match.</li>
+            <li><strong>Adjust 5 sliders</strong> to set your launch parameters. A ghost trajectory preview (blue line) updates live as you change them.</li>
+            <li><strong>Launch!</strong> Watch your rocket fly. It performs up to 3 burns automatically: ascent, injection, and circularization.</li>
+            <li><strong>Score 0-100</strong> based on orbit accuracy (60%) and fuel efficiency (40%).</li>
+          </ol>
+          <div class="welcome-sliders-summary">
+            <h3>THE 5 SLIDERS</h3>
+            <div class="welcome-slider-item"><span class="ws-name">Azimuth</span> <span class="ws-desc">Compass heading (0=N, 90=E). Controls orbit inclination.</span></div>
+            <div class="welcome-slider-item"><span class="ws-name">Elevation</span> <span class="ws-desc">Launch angle above horizon. Steeper = higher initial climb.</span></div>
+            <div class="welcome-slider-item"><span class="ws-name">Thrust</span> <span class="ws-desc">Fuel % for ascent. Also controls auto-circ: ≤50% → circular, 55-62% → elliptical.</span></div>
+            <div class="welcome-slider-item"><span class="ws-name">Inj. Alt</span> <span class="ws-desc">Altitude (km) where the injection burn fires. Usually set LOW (~300 km).</span></div>
+            <div class="welcome-slider-item"><span class="ws-name">Target Apo</span> <span class="ws-desc">Target apogee (km). The game computes the right injection burn.</span></div>
+          </div>
+          <div class="welcome-tip">TIP: The gold ring is your target. The blue ghost line is your predicted trajectory. Match them! Thrust ≤50% for circular orbits, 55-62% for elliptical.</div>
+        </div>
+        <button id="btn-start-game" class="btn-primary btn-launch">START GAME</button>
+      </div>
+
+      <!-- Briefing Panel -->
+      <div id="briefing-panel" class="panel hidden">
+        <h1>MISSION BRIEFING</h1>
+        <div id="briefing-orbit-name" class="orbit-name"></div>
+        <div id="briefing-description" class="description"></div>
+        <div id="briefing-params" class="params-grid"></div>
+        <div id="briefing-difficulty" class="difficulty"></div>
+        <button id="btn-accept-mission" class="btn-primary">ACCEPT MISSION</button>
+      </div>
+
+      <!-- Launch Panel -->
+      <div id="launch-panel" class="panel hidden">
+        <h2>LAUNCH PARAMETERS</h2>
+        <div id="orbit-hints" class="orbit-hints hidden"></div>
+        <div id="slider-controls"></div>
+        <div class="launch-actions">
+          <button id="btn-launch" class="btn-primary btn-launch">LAUNCH</button>
+        </div>
+      </div>
+
+      <!-- HUD -->
+      <div id="hud" class="hidden">
+        <div id="hud-altitude" class="hud-item">ALT: <span>0</span> km</div>
+        <div id="hud-velocity" class="hud-item">VEL: <span>0</span> m/s</div>
+        <div id="hud-fuel" class="hud-item">FUEL: <span>100</span>%</div>
+        <div id="hud-phase" class="hud-item">PHASE: <span>READY</span></div>
+      </div>
+
+      <!-- Score Panel -->
+      <div id="score-panel" class="panel hidden">
+        <h1>MISSION COMPLETE</h1>
+        <div id="score-orbit-comparison"></div>
+        <div id="score-breakdown"></div>
+        <div id="score-total"></div>
+        <div class="score-actions">
+          <button id="btn-retry" class="btn-secondary">RETRY</button>
+          <button id="btn-next" class="btn-primary">NEXT MISSION</button>
+        </div>
+      </div>
+
+      <!-- Help Button (persistent) -->
+      <button id="btn-help" class="btn-help" title="How to play">?</button>
+
+      <!-- Help Overlay -->
+      <div id="help-overlay" class="hidden">
+        <div id="help-panel" class="panel help-panel">
+          <h1>HELP</h1>
+          <div class="help-content">
+            <h3>GOAL</h3>
+            <p>Match the target orbit (gold ring) by setting launch parameters. The rocket performs up to 3 burns: ascent, injection, and auto-circularization at apogee.</p>
+
+            <h3>THE 3 BURN PHASES</h3>
+            <div class="help-slider-row"><strong>1. Ascent</strong><br>The rocket launches and thrusts for 300 seconds, using the thrust % of total fuel. After ascent, it coasts upward.</div>
+            <div class="help-slider-row"><strong>2. Injection Burn</strong><br>When the rocket reaches injection altitude, it fires prograde (forward) to raise the orbit to the target apogee.</div>
+            <div class="help-slider-row"><strong>3. Auto-Circularization</strong><br>At apogee, the rocket tries to circularize. The amount depends on thrust: ≤50% = full circ, ≥62% = no circ. The 50-62% range gives partial circ for elliptical orbits.</div>
+
+            <h3>SLIDERS EXPLAINED</h3>
+            <div class="help-slider-row"><strong>Azimuth (0-360°)</strong><br>Compass heading. 90°=East (equatorial orbits), 0°/180°=North/South (polar orbits). Controls inclination.</div>
+            <div class="help-slider-row"><strong>Elevation (15-85°)</strong><br>Angle above the horizon. ~30-45° is typical. Higher = steeper initial climb.</div>
+            <div class="help-slider-row"><strong>Ascent Thrust (10-100%)</strong><br>Dual purpose: sets ascent energy AND controls auto-circ. ≤50% → circular orbits. 55-62% → elliptical orbits. This is the KEY slider for eccentricity.</div>
+            <div class="help-slider-row"><strong>Injection Altitude (100-5,000 km)</strong><br>Where the injection burn fires. Keep this LOW (~200-300 km) for most missions. The rocket must reach this altitude first.</div>
+            <div class="help-slider-row"><strong>Target Apogee (150-50,000 km)</strong><br>How high you want the orbit to go. The game auto-computes the injection delta-V needed.</div>
+
+            <h3>QUICK TIPS</h3>
+            <ul>
+              <li>The <strong>blue ghost line</strong> shows your predicted trajectory. Match it to the gold target ring.</li>
+              <li>For <strong>low orbits (LEO)</strong>: ~44-47% thrust, target apogee = target altitude.</li>
+              <li>For <strong>high circular orbits (GEO)</strong>: ~50% thrust, target apogee = 35,786 km.</li>
+              <li>For <strong>polar orbits</strong>: set azimuth near 0° or 350° (slightly west compensates for Earth rotation).</li>
+              <li>For <strong>elliptical orbits (GTO, HEO, Molniya)</strong>: thrust 58-62% reduces auto-circ → orbit stays elliptical.</li>
+              <li><strong>Fuel budget: 16 km/s total</strong>. Scoring: 60% orbit accuracy + 40% fuel efficiency.</li>
+            </ul>
+          </div>
+          <button id="btn-close-help" class="btn-primary">GOT IT</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
