@@ -48,8 +48,8 @@ const tests = [
 
 console.log('Orbit Launcher - Physics Verification Test');
 console.log('='.repeat(100));
-console.log('Name'.padEnd(16), 'Altitude'.padStart(8), 'Inc'.padStart(6), 'Ecc'.padStart(8), 'Fuel'.padStart(6), 'Perigee'.padStart(8), 'Apogee'.padStart(8), '  Target');
-console.log('-'.repeat(100));
+console.log('Name'.padEnd(16), 'Altitude'.padStart(8), 'Inc'.padStart(6), 'Ecc'.padStart(8), 'Fuel'.padStart(6), 'Pts'.padStart(6), 'Perigee'.padStart(8), 'Apogee'.padStart(8), '  Target');
+console.log('-'.repeat(106));
 
 for (const test of tests) {
   const result = simulateLaunch(test.params);
@@ -63,6 +63,7 @@ for (const test of tests) {
     `${el.inclination.toFixed(1)}`.padStart(6),
     `${el.eccentricity.toFixed(4)}`.padStart(8),
     `${(fuel * 100).toFixed(1)}%`.padStart(6),
+    `${result.trajectory.length}`.padStart(6),
     per.padStart(8),
     apo.padStart(8),
     `  ${test.target}`,

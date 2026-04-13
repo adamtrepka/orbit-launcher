@@ -223,6 +223,8 @@ export function simulateLaunch(params: LaunchParams): {
   let phase: Phase = Phase.ASCENT;
   let prevRadialVel = 1.0;
   let finalCoastSteps = 0;
+  let finalCoastTarget = 50;  // will be computed when entering FINAL_COAST
+  let finalCoastDt = 2.0;     // will be set to larger dt for orbit trace
 
   for (let step = 0; step < maxSteps; step++) {
     const r = pos.length();
@@ -232,7 +234,9 @@ export function simulateLaunch(params: LaunchParams): {
     const dt = phase === Phase.ASCENT ? 1.0 : phase === Phase.COAST_TO_APOGEE ? 5.0 : 2.0;
 
     // Store trajectory
-    if (step % 3 === 0) {
+    // During FINAL_COAST, store every step (dt is already 30s, so points are well-spaced)
+    // During other phases, store every 3rd step
+    if (phase === Phase.FINAL_COAST || step % 3 === 0) {
       trajectory.push(pos.clone());
     }
 
@@ -325,19 +329,44 @@ export function simulateLaunch(params: LaunchParams): {
     prevRadialVel = radialVel;
 
     // === Phase: FINAL COAST ===
+    // After all burns, coast for one full orbital period to trace the final orbit.
     if (phase === Phase.FINAL_COAST) {
       finalCoastSteps++;
-      if (finalCoastSteps > 50) {
+      // Compute orbital period from current state (once, when entering this phase)
+      if (finalCoastSteps === 1) {
+        const energy = vel.lengthSq() / 2 - MU / r;
+        if (energy < 0) {
+          // Bound orbit: period = 2π * sqrt(a³/μ)
+          const a = -MU / (2 * energy);
+          const period = 2 * Math.PI * Math.sqrt(a * a * a / MU);
+          // Coast for one full period. dt in FINAL_COAST is 2.0 (from the dt line above,
+          // but we'll use a bigger dt for efficiency). We need period/dt steps.
+          // Use larger dt for the orbit trace (30s steps) to keep point count reasonable.
+          const coastDt = 30.0;
+          const coastSteps = Math.ceil(period / coastDt);
+          // Cap at ~3000 steps to prevent runaway for very long-period orbits
+          finalCoastTarget = Math.min(coastSteps, 3000);
+          finalCoastDt = coastDt;
+        } else {
+          // Escape trajectory: just coast for 500 steps
+          finalCoastTarget = 500;
+          finalCoastDt = 10.0;
+        }
+      }
+
+      if (finalCoastSteps > finalCoastTarget) {
         phase = Phase.DONE;
       }
     }
 
     // Integrate (symplectic Euler)
-    vel.add(grav.clone().multiplyScalar(dt));
-    vel.add(thrust.clone().multiplyScalar(dt));
-    pos.add(vel.clone().multiplyScalar(dt));
+    // Use custom dt for final coast phase
+    const integrateDt = phase === Phase.FINAL_COAST ? finalCoastDt : dt;
+    vel.add(grav.clone().multiplyScalar(integrateDt));
+    vel.add(thrust.clone().multiplyScalar(integrateDt));
+    pos.add(vel.clone().multiplyScalar(integrateDt));
 
-    time += dt;
+    time += integrateDt;
 
     // Crash check
     if (alt < -10) break;

@@ -268,8 +268,8 @@ export class Game {
     this.rocket.show();
     this.hud.show();
 
-    // Adapt animation speed to trajectory length (aim for ~6 seconds of animation at 60fps)
-    const targetFrames = 360; // ~6 seconds at 60fps
+    // Adapt animation speed to trajectory length (aim for ~8 seconds of animation at 60fps)
+    const targetFrames = 480; // ~8 seconds at 60fps
     this.launchAnimSpeed = Math.max(3, Math.ceil(this.launchTrajectory.length / targetFrames));
 
     // Disable OrbitControls during launch so camera follow works unimpeded
