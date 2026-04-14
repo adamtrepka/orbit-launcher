@@ -341,6 +341,7 @@ export class LaunchPanel {
     this.onLaunch = onLaunch;
     this.currentMission = mission ?? null;
     this.panel.classList.remove('hidden');
+    this.enable();
 
     // Reapply mode visibility (mission context may have changed)
     this.applyMode();
