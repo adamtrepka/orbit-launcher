@@ -18,6 +18,11 @@ export function sceneToKm(units: number): number {
   return units / SCENE_SCALE;
 }
 
+// Sun direction: shared by directional light, sun visual, and atmosphere shader.
+// Plain tuple [x, y, z] to avoid importing THREE in this module.
+// Represents the direction FROM which sunlight arrives (i.e. the sun's position direction).
+export const SUN_DIRECTION: [number, number, number] = [5, 3, 4];
+
 // Game configuration
 export const GAME_CONFIG = {
   TOTAL_FUEL: 16000, // m/s total delta-v budget

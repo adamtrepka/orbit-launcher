@@ -1,5 +1,7 @@
-import type { TargetOrbit } from '../orbits/types';
 import { getRandomOrbitDefinition } from '../orbits/OrbitDefinitions';
+import { PLANET_TYPE_KEYS } from '../scene/planetTypes';
+import type { TargetOrbit } from '../orbits/types';
+import type { PlanetType } from '../scene/planetTypes';
 import type { SeededRandom } from '../utils/random';
 
 /**
@@ -7,11 +9,16 @@ import type { SeededRandom } from '../utils/random';
  *
  * When called without arguments, uses Math.random() (non-deterministic).
  * When called with a SeededRandom, the mission is fully deterministic —
- * same seed always produces the same orbit type and parameters.
+ * same seed always produces the same orbit type, parameters, and planet.
  */
 export function generateMission(rng?: SeededRandom): TargetOrbit {
   const nextFn = rng ? () => rng.next() : undefined;
   const definition = getRandomOrbitDefinition(nextFn);
   const params = definition.generateParams(nextFn);
-  return { definition, params };
+
+  // Pick a random planet type for the visual central body
+  const roll = nextFn ? nextFn() : Math.random();
+  const planetType: PlanetType = PLANET_TYPE_KEYS[Math.floor(roll * PLANET_TYPE_KEYS.length)];
+
+  return { definition, params, planetType };
 }

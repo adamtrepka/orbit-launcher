@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SUN_DIRECTION } from '../utils/constants';
 
 /**
  * Procedural Sun: bright core sphere with inner corona and outer glow halo.
@@ -11,8 +12,8 @@ export class Sun {
   constructor() {
     this.group = new THREE.Group();
 
-    // Place the Sun at distance 100 along the directional light direction (5, 3, 4)
-    const lightDir = new THREE.Vector3(5, 3, 4).normalize();
+    // Place the Sun at distance 100 along the directional light direction
+    const lightDir = new THREE.Vector3(...SUN_DIRECTION).normalize();
     const sunDistance = 100;
     this.group.position.copy(lightDir.multiplyScalar(sunDistance));
 

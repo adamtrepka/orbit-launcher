@@ -5,7 +5,8 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { GameState } from './GameState';
 import { GameEngine } from './GameEngine';
 import { SceneManager } from '../scene/SceneManager';
-import { Earth } from '../scene/Earth';
+import { ProceduralPlanet } from '../scene/ProceduralPlanet';
+import { PLANET_CONFIGS } from '../scene/planetTypes';
 import { Starfield } from '../scene/Starfield';
 import { Sun } from '../scene/Sun';
 import { OrbitRenderer } from '../scene/OrbitRenderer';
@@ -32,7 +33,7 @@ import type { ScoreBreakdown } from '../scoring/ScoreCalculator';
 export class Game {
   private engine: GameEngine;
   private sceneManager: SceneManager;
-  private earth: Earth;
+  private planet: ProceduralPlanet;
   private starfield: Starfield;
   private sun: Sun;
   private orbitRenderer: OrbitRenderer;
@@ -73,9 +74,9 @@ export class Game {
     // Scene setup
     this.sceneManager = new SceneManager(canvas);
 
-    // Earth
-    this.earth = new Earth();
-    this.sceneManager.scene.add(this.earth.group);
+    // Planet (default to terrestrial for welcome screen)
+    this.planet = new ProceduralPlanet(PLANET_CONFIGS.TERRESTRIAL);
+    this.sceneManager.scene.add(this.planet.group);
 
     // Starfield
     this.starfield = new Starfield();
@@ -183,6 +184,12 @@ export class Game {
     this.launchPanel.hide();
     this.hud.hide();
     this.scorePanel.hide();
+
+    // Swap planet to match mission's planet type
+    this.sceneManager.scene.remove(this.planet.group);
+    this.planet.dispose();
+    this.planet = new ProceduralPlanet(PLANET_CONFIGS[mission.planetType]);
+    this.sceneManager.scene.add(this.planet.group);
 
     // Reset camera
     this.sceneManager.camera.position.set(3, 2, 4);
@@ -646,7 +653,7 @@ export class Game {
   }
 
   private update(dt: number, elapsed: number): void {
-    this.earth.update(dt, elapsed);
+    this.planet.update(dt, elapsed);
 
     const state = this.engine.getState();
 

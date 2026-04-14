@@ -1,6 +1,7 @@
-import type { TargetOrbit } from '../orbits/types';
 import { formatNumber } from '../utils/math';
 import { getBestScore } from '../scoring/HighScores';
+import { PLANET_CONFIGS } from '../scene/planetTypes';
+import type { TargetOrbit } from '../orbits/types';
 
 /**
  * Mission briefing overlay: shows orbit type, description, target params, difficulty.
@@ -35,6 +36,10 @@ export class BriefingPanel {
 
     this.orbitName.textContent = def.name;
     this.description.textContent = def.description;
+
+    // Show planet name as subtitle
+    const planetName = PLANET_CONFIGS[target.planetType].name;
+    this.orbitName.textContent = `${def.name} — ${planetName}`;
 
     // Build params grid
     let paramsHtml = '';

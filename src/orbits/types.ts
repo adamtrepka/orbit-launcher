@@ -1,3 +1,5 @@
+import type { PlanetType } from '../scene/planetTypes';
+
 export const OrbitType = {
   LEO: 'LEO',
   POLAR: 'POLAR',
@@ -48,6 +50,8 @@ export interface OrbitDefinition {
 export interface TargetOrbit {
   definition: OrbitDefinition;
   params: OrbitParameters;
+  /** Visual planet type for the central body this round. */
+  planetType: PlanetType;
 }
 
 export const ControlMode = {

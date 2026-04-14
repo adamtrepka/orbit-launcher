@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { SUN_DIRECTION } from '../utils/constants';
 
 export class SceneManager {
   public scene: THREE.Scene;
@@ -45,15 +46,15 @@ export class SceneManager {
     this.controls.enablePan = false;
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x334466, 0.6);
+    const ambientLight = new THREE.AmbientLight(0x334466, 0.25);
     this.scene.add(ambientLight);
 
     const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    sunLight.position.set(5, 3, 4);
+    sunLight.position.set(...SUN_DIRECTION);
     this.scene.add(sunLight);
 
     // Subtle fill from opposite side
-    const fillLight = new THREE.DirectionalLight(0x4466aa, 0.3);
+    const fillLight = new THREE.DirectionalLight(0x4466aa, 0.1);
     fillLight.position.set(-3, -1, -2);
     this.scene.add(fillLight);
 
