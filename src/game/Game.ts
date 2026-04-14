@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { GameState } from './GameState';
 import { GameEngine } from './GameEngine';
 import { SceneManager } from '../scene/SceneManager';
@@ -42,7 +45,8 @@ export class Game {
   private scorePanel: ScorePanel;
 
   // Ghost trajectory preview
-  private ghostLine: THREE.Line | null = null;
+  private ghostLine: Line2 | null = null;
+  private ghostMaterial: LineMaterial | null = null;
   private ghostThrottleTimer: number = 0;
 
   // Launch animation
@@ -58,7 +62,8 @@ export class Game {
 
   // Multiplayer
   private session: MultiplayerSession | null = null;
-  private opponentTrajectoryLine: THREE.Line | null = null;
+  private opponentTrajectoryLine: Line2 | null = null;
+  private opponentTrajectoryMaterial: LineMaterial | null = null;
   private mpWaiting: HTMLElement;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -106,6 +111,13 @@ export class Game {
 
     // Subscribe to engine events
     this.subscribeToEngine();
+
+    // Resize handling for LineMaterial resolution
+    this.sceneManager.onResizeCallback((w, h) => {
+      this.orbitRenderer.setResolution(w, h);
+      if (this.ghostMaterial) this.ghostMaterial.resolution.set(w, h);
+      if (this.opponentTrajectoryMaterial) this.opponentTrajectoryMaterial.resolution.set(w, h);
+    });
 
     // Update loop
     this.sceneManager.onUpdate((dt, elapsed) => this.update(dt, elapsed));
@@ -190,6 +202,7 @@ export class Game {
     if (!mission) return;
 
     this.launchPanel.disable();
+    this.launchPanel.stopTimer();
     this.clearGhost();
 
     // In multiplayer, notify the opponent
@@ -311,16 +324,22 @@ export class Game {
     // Get contextual hints for this orbit type
     const hints = getOrbitHints(mission.definition.type, mission.params);
 
+    const doLaunch = (): void => {
+      const params = this.launchPanel.getParams();
+      this.launchPanel.stopTimer();
+      this.engine.startLaunch(params);
+    };
+
     // Show launch panel with hints and mission context (for arcade auto-compute)
     this.launchPanel.show(
       (params) => this.onParamsChanged(params),
-      () => {
-        const params = this.launchPanel.getParams();
-        this.engine.startLaunch(params);
-      },
+      doLaunch,
       hints,
       mission,
     );
+
+    // Start 30-second countdown — auto-launches with current params on expiry
+    this.launchPanel.startTimer(30, doLaunch);
   }
 
   private onRetrySetup(): void {
@@ -347,16 +366,22 @@ export class Game {
 
     const hints = getOrbitHints(mission.definition.type, mission.params);
 
+    const doLaunch = (): void => {
+      const params = this.launchPanel.getParams();
+      this.launchPanel.stopTimer();
+      this.engine.startLaunch(params);
+    };
+
     this.launchPanel.enable();
     this.launchPanel.show(
       (params) => this.onParamsChanged(params),
-      () => {
-        const params = this.launchPanel.getParams();
-        this.engine.startLaunch(params);
-      },
+      doLaunch,
       hints,
       mission,
     );
+
+    // Start 30-second countdown
+    this.launchPanel.startTimer(30, doLaunch);
   }
 
   // ---------------------------------------------------------------------------
@@ -504,19 +529,12 @@ export class Game {
     this.clearOpponentTrajectory();
 
     const result = simulateLaunch(params);
-    const scenePoints = result.trajectory.map(
-      (p) => new THREE.Vector3(p.x * kmToScene(1), p.y * kmToScene(1), p.z * kmToScene(1))
-    );
+    const flat = this.trajectoryToFlat(result.trajectory);
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(scenePoints);
-    const material = new THREE.LineBasicMaterial({
-      color: 0xef5350,
-      transparent: true,
-      opacity: 0.35,
-    });
-
-    this.opponentTrajectoryLine = new THREE.Line(geometry, material);
-    this.sceneManager.scene.add(this.opponentTrajectoryLine);
+    const { line, material } = this.createFatTrajectory(flat, 0xef5350, 1.5, 0.4);
+    this.opponentTrajectoryLine = line;
+    this.opponentTrajectoryMaterial = material;
+    this.sceneManager.scene.add(line);
   }
 
   /** Compute opponent's orbital elements from their params. */
@@ -529,7 +547,11 @@ export class Game {
     if (this.opponentTrajectoryLine) {
       this.sceneManager.scene.remove(this.opponentTrajectoryLine);
       this.opponentTrajectoryLine.geometry.dispose();
+      if (this.opponentTrajectoryMaterial) {
+        this.opponentTrajectoryMaterial.dispose();
+      }
       this.opponentTrajectoryLine = null;
+      this.opponentTrajectoryMaterial = null;
     }
   }
 
@@ -556,27 +578,56 @@ export class Game {
     const ghostPoints = simulateGhost(params);
     if (ghostPoints.length < 2) return;
 
-    const scenePoints = ghostPoints.map(
-      (p) => new THREE.Vector3(p.x * kmToScene(1), p.y * kmToScene(1), p.z * kmToScene(1))
-    );
-
-    const geometry = new THREE.BufferGeometry().setFromPoints(scenePoints);
-    const material = new THREE.LineBasicMaterial({
-      color: 0x44aaff,
-      transparent: true,
-      opacity: 0.25,
-    });
-
-    this.ghostLine = new THREE.Line(geometry, material);
-    this.sceneManager.scene.add(this.ghostLine);
+    const flat = this.trajectoryToFlat(ghostPoints);
+    const { line, material } = this.createFatTrajectory(flat, 0x00ffcc, 1.5, 0.5);
+    this.ghostLine = line;
+    this.ghostMaterial = material;
+    this.sceneManager.scene.add(line);
   }
 
   private clearGhost(): void {
     if (this.ghostLine) {
       this.sceneManager.scene.remove(this.ghostLine);
       this.ghostLine.geometry.dispose();
+      if (this.ghostMaterial) {
+        this.ghostMaterial.dispose();
+      }
       this.ghostLine = null;
+      this.ghostMaterial = null;
     }
+  }
+
+  /** Convert THREE.Vector3[] trajectory (km) to flat number[] in scene units. */
+  private trajectoryToFlat(points: THREE.Vector3[]): number[] {
+    const scale = kmToScene(1);
+    const flat: number[] = [];
+    for (const p of points) {
+      flat.push(p.x * scale, p.y * scale, p.z * scale);
+    }
+    return flat;
+  }
+
+  /** Create a Line2 with LineMaterial for a visible trajectory. */
+  private createFatTrajectory(
+    flatPositions: number[],
+    color: number,
+    lineWidth: number,
+    opacity: number,
+  ): { line: Line2; material: LineMaterial } {
+    const geometry = new LineGeometry();
+    geometry.setPositions(flatPositions);
+
+    const material = new LineMaterial({
+      color,
+      linewidth: lineWidth,
+      transparent: true,
+      opacity,
+      worldUnits: false,
+    });
+    material.resolution.set(window.innerWidth, window.innerHeight);
+
+    const line = new Line2(geometry, material);
+    return { line, material };
   }
 
   // ---------------------------------------------------------------------------

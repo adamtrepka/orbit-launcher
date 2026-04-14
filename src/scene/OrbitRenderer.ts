@@ -1,22 +1,35 @@
 import * as THREE from 'three';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import type { OrbitParameters } from '../orbits/types';
 import { EARTH_RADIUS, kmToScene } from '../utils/constants';
 
 /**
- * Renders an orbit as a 3D ellipse around Earth.
- * Supports both circular and elliptical orbits with any inclination.
+ * Renders an orbit as a 3D ellipse around Earth using fat lines (Line2)
+ * for high visibility on all displays.
  */
 export class OrbitRenderer {
   private group: THREE.Group;
-  private targetLine: THREE.Line | null = null;
-  private achievedLine: THREE.Line | null = null;
-  private opponentLine: THREE.Line | null = null;
+  private targetLine: Line2 | null = null;
+  private achievedLine: Line2 | null = null;
+  private opponentLine: Line2 | null = null;
   private parentScene: THREE.Scene;
+
+  /** All active LineMaterials — updated on resize via setResolution(). */
+  private materials: Set<LineMaterial> = new Set();
 
   constructor(scene: THREE.Scene) {
     this.parentScene = scene;
     this.group = new THREE.Group();
     scene.add(this.group);
+  }
+
+  /** Update the resolution uniform on all active LineMaterials. */
+  public setResolution(width: number, height: number): void {
+    for (const mat of this.materials) {
+      mat.resolution.set(width, height);
+    }
   }
 
   /**
@@ -64,82 +77,83 @@ export class OrbitRenderer {
     return points;
   }
 
+  /** Convert Vector3[] to a flat number[] for LineGeometry. */
+  private flattenPoints(points: THREE.Vector3[]): number[] {
+    const flat: number[] = [];
+    for (const p of points) {
+      flat.push(p.x, p.y, p.z);
+    }
+    return flat;
+  }
+
+  /** Create a Line2 with LineMaterial for thick, visible orbit lines. */
+  private createFatLine(
+    points: THREE.Vector3[],
+    color: number,
+    lineWidth: number,
+    opacity: number,
+  ): Line2 {
+    const geometry = new LineGeometry();
+    geometry.setPositions(this.flattenPoints(points));
+
+    const material = new LineMaterial({
+      color,
+      linewidth: lineWidth,
+      transparent: true,
+      opacity,
+      worldUnits: false, // linewidth is in pixels
+    });
+    material.resolution.set(window.innerWidth, window.innerHeight);
+    this.materials.add(material);
+
+    return new Line2(geometry, material);
+  }
+
+  /** Remove a LineMaterial from the tracked set. */
+  private disposeLine(line: Line2): void {
+    const mat = line.material as LineMaterial;
+    this.materials.delete(mat);
+    line.geometry.dispose();
+    mat.dispose();
+  }
+
   /**
-   * Show the target orbit as a highlighted ring
+   * Show the target orbit as a highlighted ring.
    */
   showTarget(params: OrbitParameters): void {
     this.clearTarget();
 
     const points = this.generateOrbitPoints(params);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-    const material = new THREE.LineBasicMaterial({
-      color: 0xffd54f,
-      transparent: true,
-      opacity: 0.6,
-      linewidth: 1,
-    });
-
-    this.targetLine = new THREE.Line(geometry, material);
+    this.targetLine = this.createFatLine(points, 0xffd54f, 2.5, 0.9);
     this.group.add(this.targetLine);
-
-    // Add dashed version on top for emphasis
-    const dashMat = new THREE.LineDashedMaterial({
-      color: 0xffd54f,
-      dashSize: 0.05,
-      gapSize: 0.05,
-      transparent: true,
-      opacity: 0.3,
-    });
-    const dashLine = new THREE.Line(geometry.clone(), dashMat);
-    dashLine.computeLineDistances();
-    this.targetLine.add(dashLine);
   }
 
   /**
-   * Show the achieved orbit (post-launch result)
+   * Show the achieved orbit (post-launch result).
    */
   showAchieved(params: OrbitParameters): void {
     this.clearAchieved();
 
     const points = this.generateOrbitPoints(params);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-    const material = new THREE.LineBasicMaterial({
-      color: 0x66bb6a,
-      transparent: true,
-      opacity: 0.8,
-      linewidth: 1,
-    });
-
-    this.achievedLine = new THREE.Line(geometry, material);
+    this.achievedLine = this.createFatLine(points, 0x66bb6a, 2, 0.85);
     this.group.add(this.achievedLine);
   }
 
   /**
-   * Show the opponent's achieved orbit (multiplayer — orange/red color).
+   * Show the opponent's achieved orbit (multiplayer — red color).
    */
   showOpponent(params: OrbitParameters): void {
     this.clearOpponent();
 
     const points = this.generateOrbitPoints(params);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-    const material = new THREE.LineBasicMaterial({
-      color: 0xef5350,
-      transparent: true,
-      opacity: 0.7,
-      linewidth: 1,
-    });
-
-    this.opponentLine = new THREE.Line(geometry, material);
+    this.opponentLine = this.createFatLine(points, 0xef5350, 2, 0.75);
     this.group.add(this.opponentLine);
   }
 
   clearTarget(): void {
     if (this.targetLine) {
       this.group.remove(this.targetLine);
-      this.targetLine.geometry.dispose();
+      this.disposeLine(this.targetLine);
       this.targetLine = null;
     }
   }
@@ -147,7 +161,7 @@ export class OrbitRenderer {
   clearAchieved(): void {
     if (this.achievedLine) {
       this.group.remove(this.achievedLine);
-      this.achievedLine.geometry.dispose();
+      this.disposeLine(this.achievedLine);
       this.achievedLine = null;
     }
   }
@@ -155,7 +169,7 @@ export class OrbitRenderer {
   clearOpponent(): void {
     if (this.opponentLine) {
       this.group.remove(this.opponentLine);
-      this.opponentLine.geometry.dispose();
+      this.disposeLine(this.opponentLine);
       this.opponentLine = null;
     }
   }

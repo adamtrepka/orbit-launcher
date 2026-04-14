@@ -9,6 +9,7 @@ export class SceneManager {
 
   private clock: THREE.Clock;
   private callbacks: Array<(dt: number, elapsed: number) => void> = [];
+  private resizeCallbacks: Array<(width: number, height: number) => void> = [];
 
   constructor(canvas: HTMLCanvasElement) {
     // Scene
@@ -63,9 +64,20 @@ export class SceneManager {
   }
 
   onResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(w, h);
+
+    for (const cb of this.resizeCallbacks) {
+      cb(w, h);
+    }
+  }
+
+  /** Register a callback invoked on window resize with (width, height). */
+  onResizeCallback(callback: (width: number, height: number) => void): void {
+    this.resizeCallbacks.push(callback);
   }
 
   onUpdate(callback: (dt: number, elapsed: number) => void): void {

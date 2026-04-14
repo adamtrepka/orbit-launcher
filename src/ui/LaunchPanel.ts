@@ -97,11 +97,21 @@ export class LaunchPanel {
   private onChange: ((params: LaunchParams) => void) | null = null;
   private onLaunch: (() => void) | null = null;
 
+  // Timer state
+  private timerContainer: HTMLElement;
+  private timerFill: HTMLElement;
+  private timerText: HTMLElement;
+  private timerInterval: number = 0;
+  private timerExpiredCallback: (() => void) | null = null;
+
   constructor() {
     this.panel = document.getElementById('launch-panel')!;
     this.sliderContainer = document.getElementById('slider-controls')!;
     this.launchBtn = document.getElementById('btn-launch')!;
     this.hintsContainer = document.getElementById('orbit-hints')!;
+    this.timerContainer = document.getElementById('launch-timer')!;
+    this.timerFill = this.timerContainer.querySelector('.launch-timer-fill')!;
+    this.timerText = this.timerContainer.querySelector('.launch-timer-text')!;
 
     // Load saved mode preference, default to ARCADE
     this.mode = this.loadMode();
@@ -365,17 +375,70 @@ export class LaunchPanel {
     this.onLaunch = null;
     this.currentMission = null;
     this.hideHints();
+    this.stopTimer();
   }
 
   disable(): void {
     this.launchBtn.setAttribute('disabled', 'true');
     this.launchBtn.style.opacity = '0.5';
     this.sliders.forEach((s) => (s.disabled = true));
+    this.stopTimer();
   }
 
   enable(): void {
     this.launchBtn.removeAttribute('disabled');
     this.launchBtn.style.opacity = '1';
     this.sliders.forEach((s) => (s.disabled = false));
+  }
+
+  /**
+   * Start a visible countdown timer. When it reaches zero, onExpired is called
+   * (which typically auto-launches with current params).
+   */
+  startTimer(seconds: number, onExpired: () => void): void {
+    this.stopTimer();
+    this.timerExpiredCallback = onExpired;
+
+    const totalMs = seconds * 1000;
+    const startTime = performance.now();
+
+    this.timerContainer.classList.remove('hidden');
+    this.timerContainer.classList.remove('launch-timer-urgent');
+    this.timerFill.style.width = '100%';
+    this.timerText.textContent = String(seconds);
+
+    this.timerInterval = window.setInterval(() => {
+      const elapsed = performance.now() - startTime;
+      const remaining = Math.max(0, totalMs - elapsed);
+      const remainingSec = Math.ceil(remaining / 1000);
+      const fraction = remaining / totalMs;
+
+      this.timerFill.style.width = `${fraction * 100}%`;
+      this.timerText.textContent = String(remainingSec);
+
+      // Urgent flash in last 5 seconds
+      if (remainingSec <= 5) {
+        this.timerContainer.classList.add('launch-timer-urgent');
+      }
+
+      if (remaining <= 0) {
+        this.stopTimer();
+        if (this.timerExpiredCallback) {
+          this.timerExpiredCallback();
+          this.timerExpiredCallback = null;
+        }
+      }
+    }, 100);
+  }
+
+  /** Stop and hide the timer. */
+  stopTimer(): void {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = 0;
+    }
+    this.timerContainer.classList.add('hidden');
+    this.timerContainer.classList.remove('launch-timer-urgent');
+    this.timerExpiredCallback = null;
   }
 }
