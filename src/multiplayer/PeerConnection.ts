@@ -67,7 +67,7 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
 
       this.peer.on('connection', (conn) => {
         this.conn = conn;
-        this.setupConnection();
+        this.setupConnection(conn);
       });
 
       this.peer.on('error', (err) => {
@@ -89,18 +89,22 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
       this.peer = new Peer();
 
       this.peer.on('open', () => {
-        this.conn = this.peer!.connect(PEER_PREFIX + this.roomCode, {
+        const conn = this.peer!.connect(PEER_PREFIX + this.roomCode, {
           reliable: true,
         });
+        this.conn = conn;
+        this.setupConnection(conn);
 
-        this.conn.on('open', () => {
-          this.setupConnection();
-          resolve();
-        });
-
-        this.conn.on('error', (err) => {
-          this.setState(ConnectionState.ERROR, err.message);
-          reject(err);
+        // Resolve once we reach CONNECTED state
+        let unsub: (() => void) | null = null;
+        unsub = this.on('stateChanged', ({ state, error }) => {
+          if (state === ConnectionState.CONNECTED) {
+            unsub?.();
+            resolve();
+          } else if (state === ConnectionState.ERROR) {
+            unsub?.();
+            reject(new Error(error ?? 'Connection failed'));
+          }
         });
       });
 
@@ -130,29 +134,33 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
     this.setState(ConnectionState.DISCONNECTED);
   }
 
-  private setupConnection(): void {
-    if (!this.conn) return;
-
-    this.conn.on('open', () => {
-      this.setState(ConnectionState.CONNECTED);
-    });
-
-    // If we're the joiner, the connection is already open when we reach here
-    if (this.conn.open) {
-      this.setState(ConnectionState.CONNECTED);
-    }
-
-    this.conn.on('data', (data) => {
+  /**
+   * Attach data/close/error listeners and transition to CONNECTED.
+   * Handles the race condition where the connection may already be open
+   * by the time this method is called (common on both host and joiner paths).
+   */
+  private setupConnection(conn: DataConnection): void {
+    conn.on('data', (data) => {
       this.emit('message', { message: data as GameMessage });
     });
 
-    this.conn.on('close', () => {
+    conn.on('close', () => {
       this.setState(ConnectionState.DISCONNECTED);
     });
 
-    this.conn.on('error', (err) => {
+    conn.on('error', (err) => {
       this.setState(ConnectionState.ERROR, err.message);
     });
+
+    // Handle the open event — check if already open first to avoid
+    // missing the event when it fires before we attach the listener.
+    if (conn.open) {
+      this.setState(ConnectionState.CONNECTED);
+    } else {
+      conn.on('open', () => {
+        this.setState(ConnectionState.CONNECTED);
+      });
+    }
   }
 
   private setState(state: ConnectionState, error?: string): void {
