@@ -12,6 +12,8 @@ export class ScorePanel {
   private totalDiv: HTMLElement;
   private retryBtn: HTMLElement;
   private nextBtn: HTMLElement;
+  private dismissBtn: HTMLElement;
+  private showScoreBtn: HTMLElement;
 
   private onRetry: (() => void) | null = null;
   private onNext: (() => void) | null = null;
@@ -23,12 +25,27 @@ export class ScorePanel {
     this.totalDiv = document.getElementById('score-total')!;
     this.retryBtn = document.getElementById('btn-retry')!;
     this.nextBtn = document.getElementById('btn-next')!;
+    this.dismissBtn = document.getElementById('btn-dismiss-score')!;
+    this.showScoreBtn = document.getElementById('btn-show-score')!;
 
     this.retryBtn.addEventListener('click', () => {
       if (this.onRetry) this.onRetry();
     });
     this.nextBtn.addEventListener('click', () => {
       if (this.onNext) this.onNext();
+    });
+
+    // Dismiss: hide score panel, show floating "SCORE" button
+    this.dismissBtn.addEventListener('click', () => {
+      this.panel.classList.add('hidden');
+      this.showScoreBtn.classList.remove('hidden');
+    });
+
+    // Show score: re-show score panel, hide floating button
+    this.showScoreBtn.addEventListener('click', () => {
+    this.panel.classList.remove('hidden');
+    this.showScoreBtn.classList.add('hidden');
+      this.showScoreBtn.classList.add('hidden');
     });
   }
 
@@ -79,6 +96,7 @@ export class ScorePanel {
 
   hide(): void {
     this.panel.classList.add('hidden');
+    this.showScoreBtn.classList.add('hidden');
     this.onRetry = null;
     this.onNext = null;
   }

@@ -4,6 +4,7 @@ import { generateMission } from './MissionGenerator';
 import { SceneManager } from '../scene/SceneManager';
 import { Earth } from '../scene/Earth';
 import { Starfield } from '../scene/Starfield';
+import { Sun } from '../scene/Sun';
 import { OrbitRenderer } from '../scene/OrbitRenderer';
 import { Rocket } from '../scene/Rocket';
 import { simulateLaunch, simulateGhost } from '../physics/LaunchSimulator';
@@ -24,6 +25,7 @@ export class Game {
   private sceneManager: SceneManager;
   private earth: Earth;
   private starfield: Starfield;
+  private sun: Sun;
   private orbitRenderer: OrbitRenderer;
   private rocket: Rocket;
 
@@ -45,6 +47,8 @@ export class Game {
   private launchTrajectory: THREE.Vector3[] = [];
   private launchAnimIndex: number = 0;
   private launchAnimSpeed: number = 10; // points per frame
+  private coastStartIndex: number = 0;  // trajectory index where the orbit loop begins
+  private launchFinishTimer: number = 0; // setTimeout handle for delayed finishLaunch
   private launchResult: {
     orbitalElements: OrbitParameters;
     finalFuel: number;
@@ -61,6 +65,10 @@ export class Game {
     // Starfield
     this.starfield = new Starfield();
     this.sceneManager.scene.add(this.starfield.points);
+
+    // Sun (visual source for the directional light)
+    this.sun = new Sun();
+    this.sceneManager.scene.add(this.sun.group);
 
     // Orbit renderer
     this.orbitRenderer = new OrbitRenderer(this.sceneManager.scene);
@@ -123,6 +131,12 @@ export class Game {
   }
 
   private newMission(): void {
+    // Clear any pending finish timer from a previous launch
+    if (this.launchFinishTimer) {
+      clearTimeout(this.launchFinishTimer);
+      this.launchFinishTimer = 0;
+    }
+
     // Clean up previous state
     this.orbitRenderer.clearAll();
     this.rocket.reset();
@@ -162,11 +176,12 @@ export class Game {
       ? getOrbitHints(this.currentMission.definition.type, this.currentMission.params)
       : null;
 
-    // Show launch panel with hints
+    // Show launch panel with hints and mission context (for arcade auto-compute)
     this.launchPanel.show(
       (params) => this.onParamsChanged(params),
       () => this.executeLaunch(),
-      hints
+      hints,
+      this.currentMission,
     );
   }
 
@@ -256,6 +271,7 @@ export class Game {
 
     this.launchTrajectory = result.trajectory;
     this.launchAnimIndex = 0;
+    this.coastStartIndex = result.coastStartIndex;
     this.launchResult = {
       orbitalElements: result.orbitalElements,
       finalFuel: result.finalState.fuel,
@@ -274,12 +290,23 @@ export class Game {
 
     // Disable OrbitControls during launch so camera follow works unimpeded
     this.sceneManager.controls.enabled = false;
+
+    // Trigger score display after one full playthrough of the trajectory
+    // The animation loops endlessly, but we show the score after the first complete orbit
+    const estimatedDurationMs = (this.launchTrajectory.length / this.launchAnimSpeed / 60) * 1000;
+    // Add a small buffer (1.5s) so the player sees the orbit close before score appears
+    const scoreDelay = estimatedDurationMs + 1500;
+    this.launchFinishTimer = window.setTimeout(() => {
+      if (this.state === GameState.LAUNCHING) {
+        this.finishLaunch();
+      }
+    }, scoreDelay);
   }
 
   private update(dt: number, elapsed: number): void {
     this.earth.update(dt, elapsed);
 
-    if (this.state === GameState.LAUNCHING) {
+    if (this.state === GameState.LAUNCHING || this.state === GameState.RESULT) {
       this.updateLaunchAnimation();
     }
 
@@ -293,18 +320,23 @@ export class Game {
 
     // Step through trajectory points
     const stepsPerFrame = this.launchAnimSpeed;
-    for (let i = 0; i < stepsPerFrame && this.launchAnimIndex < this.launchTrajectory.length; i++) {
+    for (let i = 0; i < stepsPerFrame; i++) {
       this.launchAnimIndex++;
+      // Loop: when we reach the end, wrap back to coastStartIndex
+      if (this.launchAnimIndex >= this.launchTrajectory.length) {
+        this.launchAnimIndex = this.coastStartIndex;
+      }
     }
 
     // Position rocket at current trajectory point
-    const idx = Math.min(this.launchAnimIndex, this.launchTrajectory.length) - 1;
-    if (idx >= 0) {
+    const idx = this.launchAnimIndex;
+    if (idx >= 0 && idx < this.launchTrajectory.length) {
       const pos = this.launchTrajectory[idx];
       this.rocket.setPosition(pos, this.getVelocityAt(idx));
 
-      // Progressively reveal the trail up to current position
-      this.rocket.revealTrail(this.launchAnimIndex);
+      // Progressively reveal the trail up to current position (only grows, never shrinks)
+      // After first pass the trail is already fully revealed, so this is a no-op on loops
+      this.rocket.revealTrail(Math.min(this.launchAnimIndex, this.launchTrajectory.length));
 
       // Update HUD
       const alt = pos.length() - 6371;
@@ -324,12 +356,9 @@ export class Game {
       this.hud.update(alt, vel * 1000, fuelEst, phase);
     }
 
-    // Camera follow: track the rocket, pulling back as altitude increases
-    this.updateLaunchCamera();
-
-    // Animation complete
-    if (this.launchAnimIndex >= this.launchTrajectory.length) {
-      this.finishLaunch();
+    // Camera follow: track the rocket during launch only (OrbitControls handles RESULT)
+    if (this.state === GameState.LAUNCHING) {
+      this.updateLaunchCamera();
     }
   }
 
@@ -347,8 +376,9 @@ export class Game {
     const distFromCenter = rocketPos.length();
 
     // Camera offset scales with distance from Earth center
-    // Close to Earth: tight follow. Far out: pull back to see the orbit forming
-    const offsetScale = Math.max(0.3, distFromCenter * 0.5);
+    // Minimum ~1.8 Earth-radii keeps Earth + trajectory in frame during ascent.
+    // Linear growth pulls back for higher orbits so the full ring stays visible.
+    const offsetScale = Math.max(1.8, distFromCenter * 0.8 + 0.8);
 
     // Build a perpendicular offset direction
     const radial = rocketPos.clone().normalize();
@@ -444,6 +474,12 @@ export class Game {
   private retryMission(): void {
     if (!this.currentMission) return;
 
+    // Clear any pending finish timer from a previous launch
+    if (this.launchFinishTimer) {
+      clearTimeout(this.launchFinishTimer);
+      this.launchFinishTimer = 0;
+    }
+
     this.scorePanel.hide();
     this.hud.hide();
     this.orbitRenderer.clearAchieved();
@@ -465,7 +501,8 @@ export class Game {
     this.launchPanel.show(
       (params) => this.onParamsChanged(params),
       () => this.executeLaunch(),
-      hints
+      hints,
+      this.currentMission,
     );
   }
 }

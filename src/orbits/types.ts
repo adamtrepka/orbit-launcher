@@ -48,3 +48,10 @@ export interface TargetOrbit {
   definition: OrbitDefinition;
   params: OrbitParameters;
 }
+
+export const ControlMode = {
+  ARCADE: 'ARCADE',
+  PRO: 'PRO',
+} as const;
+
+export type ControlMode = (typeof ControlMode)[keyof typeof ControlMode];

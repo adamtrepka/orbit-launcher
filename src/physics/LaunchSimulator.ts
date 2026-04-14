@@ -186,9 +186,12 @@ export function simulateLaunch(params: LaunchParams): {
   trajectory: THREE.Vector3[];
   finalState: SimState;
   orbitalElements: OrbitParameters;
+  /** Trajectory index where the final coast (orbit loop) begins */
+  coastStartIndex: number;
 } {
   const maxSteps = 80000;
   const trajectory: THREE.Vector3[] = [];
+  let coastStartIndex = 0;
 
   // Launch site: equator, Earth surface
   const pos = new THREE.Vector3(EARTH_RADIUS, 0, 0);
@@ -334,6 +337,8 @@ export function simulateLaunch(params: LaunchParams): {
       finalCoastSteps++;
       // Compute orbital period from current state (once, when entering this phase)
       if (finalCoastSteps === 1) {
+        // Record where the orbit loop begins in the trajectory
+        coastStartIndex = trajectory.length;
         const energy = vel.lengthSq() / 2 - MU / r;
         if (energy < 0) {
           // Bound orbit: period = 2π * sqrt(a³/μ)
@@ -386,7 +391,7 @@ export function simulateLaunch(params: LaunchParams): {
 
   const orbitalElements = computeOrbitalElements(pos, vel);
 
-  return { trajectory, finalState: state, orbitalElements };
+  return { trajectory, finalState: state, orbitalElements, coastStartIndex };
 }
 
 /**
