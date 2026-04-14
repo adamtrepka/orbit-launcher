@@ -1,12 +1,17 @@
 import type { OrbitDefinition } from './types';
 import { OrbitType } from './types';
 
-function randRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+function randRange(min: number, max: number, rng: () => number): number {
+  return min + rng() * (max - min);
 }
 
-function randInt(min: number, max: number): number {
-  return Math.floor(randRange(min, max + 1));
+function randInt(min: number, max: number, rng: () => number): number {
+  return Math.floor(randRange(min, max + 1, rng));
+}
+
+/** Fallback to Math.random when no seeded RNG is provided. */
+function rngOrDefault(rng?: () => number): () => number {
+  return rng ?? Math.random;
 }
 
 export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
@@ -17,9 +22,10 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A circular orbit close to Earth, used by the ISS, Earth observation satellites, and constellations like Starlink.',
     difficulty: 'EASY',
-    generateParams: () => {
-      const alt = randInt(300, 1200);
-      const inc = randRange(0, 51.6);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const alt = randInt(300, 1200, r);
+      const inc = randRange(0, 51.6, r);
       return { altitude: alt, inclination: inc, eccentricity: 0 };
     },
     tolerances: { altitude: 200, inclination: 15, eccentricity: 0.05 },
@@ -30,9 +36,10 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'Passes over both poles with ~90 deg inclination. Used for full-Earth coverage in weather and reconnaissance.',
     difficulty: 'EASY',
-    generateParams: () => {
-      const alt = randInt(500, 900);
-      const inc = randRange(85, 95);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const alt = randInt(500, 900, r);
+      const inc = randRange(85, 95, r);
       return { altitude: alt, inclination: inc, eccentricity: 0 };
     },
     tolerances: { altitude: 150, inclination: 8, eccentricity: 0.04 },
@@ -45,10 +52,11 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A near-polar orbit where the satellite crosses any latitude at the same local solar time. Essential for consistent imaging.',
     difficulty: 'MEDIUM',
-    generateParams: () => {
-      const alt = randInt(500, 800);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const alt = randInt(500, 800, r);
       // SSO inclination depends on altitude; roughly 96-98 degrees for typical altitudes
-      const inc = randRange(96, 99);
+      const inc = randRange(96, 99, r);
       return { altitude: alt, inclination: inc, eccentricity: 0 };
     },
     tolerances: { altitude: 100, inclination: 4, eccentricity: 0.03 },
@@ -59,9 +67,10 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'Home of GPS, Galileo, and GLONASS navigation constellations. A sweet spot between coverage area and signal latency.',
     difficulty: 'MEDIUM',
-    generateParams: () => {
-      const alt = randInt(10000, 25000);
-      const inc = randRange(50, 65);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const alt = randInt(10000, 25000, r);
+      const inc = randRange(50, 65, r);
       return { altitude: alt, inclination: inc, eccentricity: 0 };
     },
     tolerances: { altitude: 2000, inclination: 10, eccentricity: 0.04 },
@@ -83,8 +92,9 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'Same period as Earth\'s rotation but with a non-zero inclination. The satellite traces a figure-8 pattern from the ground.',
     difficulty: 'MEDIUM',
-    generateParams: () => {
-      const inc = randRange(5, 25);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const inc = randRange(5, 25, r);
       return { altitude: 35786, inclination: inc, eccentricity: 0 };
     },
     tolerances: { altitude: 1500, inclination: 5, eccentricity: 0.03 },
@@ -97,11 +107,12 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'An elliptical orbit used to transfer satellites from LEO to GEO. Perigee near LEO, apogee at GEO altitude.',
     difficulty: 'HARD',
-    generateParams: () => {
-      const perigee = randInt(200, 400);
-      const apogee = randInt(34000, 37000);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const perigee = randInt(200, 400, r);
+      const apogee = randInt(34000, 37000, r);
       const alt = (perigee + apogee) / 2;
-      const inc = randRange(5, 28);
+      const inc = randRange(5, 28, r);
       const ecc = (apogee - perigee) / (apogee + perigee + 2 * 6371);
       return { altitude: alt, perigee, apogee, inclination: inc, eccentricity: ecc };
     },
@@ -113,11 +124,12 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A general high-eccentricity orbit spending most time near apogee. Useful for communications at high latitudes.',
     difficulty: 'HARD',
-    generateParams: () => {
-      const perigee = randInt(500, 2000);
-      const apogee = randInt(30000, 45000);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const perigee = randInt(500, 2000, r);
+      const apogee = randInt(30000, 45000, r);
       const alt = (perigee + apogee) / 2;
-      const inc = randRange(30, 70);
+      const inc = randRange(30, 70, r);
       const ecc = (apogee - perigee) / (apogee + perigee + 2 * 6371);
       return { altitude: alt, perigee, apogee, inclination: inc, eccentricity: ecc };
     },
@@ -129,9 +141,10 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A 12-hour highly elliptical orbit at 63.4 deg inclination. Developed by Russia for high-latitude communications.',
     difficulty: 'HARD',
-    generateParams: () => {
-      const perigee = randInt(400, 600);
-      const apogee = randInt(38000, 42000);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const perigee = randInt(400, 600, r);
+      const apogee = randInt(38000, 42000, r);
       const alt = (perigee + apogee) / 2;
       const ecc = (apogee - perigee) / (apogee + perigee + 2 * 6371);
       return { altitude: alt, perigee, apogee, inclination: 63.4, eccentricity: ecc };
@@ -144,9 +157,10 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A 24-hour elliptical orbit at 63.4 deg inclination. Similar to Molniya but geosynchronous -- only 2 satellites needed for coverage.',
     difficulty: 'HARD',
-    generateParams: () => {
-      const perigee = randInt(800, 1200);
-      const apogee = randInt(44000, 48000);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const perigee = randInt(800, 1200, r);
+      const apogee = randInt(44000, 48000, r);
       const alt = (perigee + apogee) / 2;
       const ecc = (apogee - perigee) / (apogee + perigee + 2 * 6371);
       return { altitude: alt, perigee, apogee, inclination: 63.4, eccentricity: ecc };
@@ -161,8 +175,9 @@ export const ORBIT_DEFINITIONS: OrbitDefinition[] = [
     description:
       'A disposal orbit ~300 km above GEO. End-of-life satellites are boosted here to free up valuable geostationary slots.',
     difficulty: 'EXPERT',
-    generateParams: () => {
-      const alt = randInt(36050, 36250);
+    generateParams: (rng?) => {
+      const r = rngOrDefault(rng);
+      const alt = randInt(36050, 36250, r);
       return { altitude: alt, inclination: 0, eccentricity: 0 };
     },
     tolerances: { altitude: 500, inclination: 2, eccentricity: 0.01 },
@@ -175,6 +190,8 @@ export function getOrbitDefinition(type: OrbitType): OrbitDefinition {
   return def;
 }
 
-export function getRandomOrbitDefinition(): OrbitDefinition {
-  return ORBIT_DEFINITIONS[Math.floor(Math.random() * ORBIT_DEFINITIONS.length)];
+/** Pick a random orbit definition. Accepts an optional RNG for deterministic selection. */
+export function getRandomOrbitDefinition(rng?: () => number): OrbitDefinition {
+  const r = rng ?? Math.random;
+  return ORBIT_DEFINITIONS[Math.floor(r() * ORBIT_DEFINITIONS.length)];
 }

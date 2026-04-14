@@ -34,8 +34,9 @@ export interface OrbitDefinition {
   name: string;
   description: string;
   difficulty: Difficulty;
-  /** Generate random target parameters within this orbit type's valid range */
-  generateParams: () => OrbitParameters;
+  /** Generate random target parameters within this orbit type's valid range.
+   *  Accepts an optional RNG function (returns [0,1)) for deterministic generation. */
+  generateParams: (rng?: () => number) => OrbitParameters;
   /** Tolerances for scoring - how much error is "close enough" */
   tolerances: {
     altitude: number; // km

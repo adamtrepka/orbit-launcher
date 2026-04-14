@@ -11,7 +11,7 @@ requiring orbital mechanics knowledge). No progression, no stakes, single-player
 
 ---
 
-## Phase 1: Arcade Controls (2-Slider Mode)
+## Phase 1: Arcade Controls (2-Slider Mode) — COMPLETED
 
 **Goal:** Add a simplified "Arcade" mode with 2 sliders (Direction + Target Altitude),
 keeping 5-slider as "Pro" mode. Auto-compute optimal values for hidden parameters.
@@ -80,84 +80,50 @@ choices still matter meaningfully.
 
 ---
 
-## Phase 2: Architecture Refactor for Multiplayer
+## Phase 2: Architecture Refactor for Multiplayer — COMPLETED
 
 **Goal:** Extract framework-agnostic `GameEngine`, add event system, seeded RNG,
 serializable protocol. Prerequisites for real-time spectating multiplayer.
 
-### Step 1: Extract `GameEngine.ts`
+### What was built
 
-Move from `Game.ts` into `src/game/GameEngine.ts`:
+- **`GameEngine.ts`** — Pure logic engine extending `EventEmitter<GameEventMap>`.
+  Owns state machine, mission generation (seeded), scoring, high scores.
+  Zero imports from `three` or DOM. Could run in Worker or on server.
+- **`GameEvents.ts`** — Typed event emitter with compile-time safe events:
+  `stateChanged`, `missionGenerated`, `launchStarted`, `launchCompleted`,
+  `scoreCalculated`.
+- **`src/utils/random.ts`** — Seeded PRNG (mulberry32). `SeededRandom` class
+  with `.next()`, `.range()`, `.int()` methods + `randomSeed()` helper.
+- **`GameProtocol.ts`** — Serializable message types (`GAME_START`, `READY`,
+  `LAUNCH`, `RESULT`, `REPLAY_REQUEST`) + `GameSnapshot` for reconnection.
+- **`MissionGenerator.ts`** — Now accepts optional `SeededRandom` for
+  deterministic mission generation.
+- **`OrbitDefinitions.ts`** — All `generateParams` and `getRandomOrbitDefinition`
+  accept optional RNG function; fall back to `Math.random` when not provided.
+- **`Game.ts`** — Rewritten as thin orchestrator. Creates `GameEngine`, subscribes
+  to events, delegates all state/scoring/missions to engine.
 
-- State machine (WELCOME -> BRIEFING -> SETUP -> LAUNCHING -> RESULT)
-- Mission generation (calls `generateMission`)
-- Launch execution (calls `simulateLaunch`, stores results)
-- Scoring (calls `calculateScore`, manages high scores)
-- Current mission, params, result as state
-
-**Zero imports** from `three` or DOM. Could run in Worker or on server.
-
-`Game.ts` becomes thin shell:
+### Architecture
 
 ```
-Game
-  GameEngine  (logic)
-  SceneManager (rendering)
-  UI Panels    (DOM)
-  Subscribes to engine events, updates visuals
+Game (orchestrator — DOM + Three.js)
+  ├── GameEngine (pure logic, extends EventEmitter<GameEventMap>)
+  │     ├── State machine (WELCOME → BRIEFING → SETUP → LAUNCHING → RESULT)
+  │     ├── Mission generation (seeded RNG → deterministic)
+  │     ├── Scoring + high scores
+  │     └── emits typed events →
+  ├── SceneManager + Earth/Starfield/Sun/OrbitRenderer/Rocket (rendering)
+  └── UI Panels — BriefingPanel, LaunchPanel, HUD, ScorePanel (DOM)
 ```
 
-### Step 2: Typed Event System
+### Design note: physics simulation boundary
 
-New file `src/game/GameEvents.ts`:
-
-```typescript
-interface GameEventMap {
-  stateChanged:     { from: GameState; to: GameState };
-  missionGenerated: { mission: TargetOrbit; seed: number };
-  launchStarted:    { params: LaunchParams };
-  launchCompleted:  { result: LaunchResult; trajectory: SimState[] };
-  scoreCalculated:  { breakdown: ScoreBreakdown; isNewBest: boolean };
-}
-```
-
-`GameEngine` extends typed `EventEmitter`. `Game.ts` subscribes:
-
-```typescript
-this.engine.on('missionGenerated', (e) => {
-  this.scene.renderTargetOrbit(e.mission);
-  this.briefingPanel.show(e.mission);
-});
-```
-
-Future multiplayer layer subscribes to same events for broadcasting.
-
-### Step 3: Seeded PRNG
-
-New file `src/utils/random.ts` — mulberry32 or similar (~10 lines).
-
-- `MissionGenerator` accepts optional seed
-- `GameEngine.newGame(seed?)` — seed provided = deterministic mission sequence
-- Multiplayer: both clients use same seed = identical missions
-
-### Step 4: Serializable Game Protocol
-
-New file `src/game/GameProtocol.ts`:
-
-```typescript
-type GameMessage =
-  | { type: 'GAME_START'; seed: number; rounds: number }
-  | { type: 'READY'; playerId: string }
-  | { type: 'LAUNCH'; params: LaunchParams }
-  | { type: 'RESULT'; score: number; breakdown: ScoreBreakdown }
-  | { type: 'REPLAY_REQUEST'; round: number };
-
-interface GameSnapshot {
-  seed: number;
-  round: number;
-  players: { id: string; launches: LaunchParams[]; scores: number[] }[];
-}
-```
+`simulateLaunch()` returns `THREE.Vector3[]` for the trajectory, making it
+Three.js-dependent. Rather than refactoring the entire physics engine, the
+orchestrator (`Game.ts`) calls the simulator and feeds the result back to
+the engine via `engine.completeLaunch(outcome)`. This keeps the engine pure
+while the orchestrator handles the Three.js boundary.
 
 ### Step 5: Real-Time Spectating Data Model
 
@@ -178,13 +144,14 @@ architecture that makes it pluggable later.
 
 ### Files Summary
 
-| Action   | Files                                              |
-|----------|----------------------------------------------------|
-| Create   | `GameEngine.ts`, `GameEvents.ts`, `GameProtocol.ts`|
-| Create   | `src/utils/random.ts`                              |
-| Heavy mod| `Game.ts` (becomes thin orchestrator)              |
-| Mod      | `MissionGenerator.ts` (accepts seed)               |
-| Light mod| `types.ts` (new interfaces)                        |
+| Action    | Files                                              |
+|-----------|----------------------------------------------------|
+| Created   | `GameEngine.ts`, `GameEvents.ts`, `GameProtocol.ts`|
+| Created   | `src/utils/random.ts`                              |
+| Rewritten | `Game.ts` (thin orchestrator)                      |
+| Modified  | `MissionGenerator.ts` (accepts seeded RNG)         |
+| Modified  | `OrbitDefinitions.ts` (accepts RNG in generators)  |
+| Modified  | `types.ts` (`generateParams` accepts optional RNG) |
 
 ---
 
@@ -246,3 +213,4 @@ These are additional features to consider after the foundation is in place.
 | RNG | Seeded PRNG (mulberry32) | Same seed = same missions; critical for fair multiplayer |
 | Network layer | Deferred (not in Phase 2) | Build the pluggable architecture first, pick transport later |
 | Implementation order | Arcade controls -> Architecture refactor | Immediate playability improvement first, then structural cleanup |
+| Physics boundary | Orchestrator calls sim, feeds result to engine | Avoids refactoring LaunchSimulator away from THREE.Vector3; engine stays pure |
