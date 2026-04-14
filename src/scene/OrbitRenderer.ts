@@ -10,6 +10,7 @@ export class OrbitRenderer {
   private group: THREE.Group;
   private targetLine: THREE.Line | null = null;
   private achievedLine: THREE.Line | null = null;
+  private opponentLine: THREE.Line | null = null;
   private parentScene: THREE.Scene;
 
   constructor(scene: THREE.Scene) {
@@ -115,6 +116,26 @@ export class OrbitRenderer {
     this.group.add(this.achievedLine);
   }
 
+  /**
+   * Show the opponent's achieved orbit (multiplayer — orange/red color).
+   */
+  showOpponent(params: OrbitParameters): void {
+    this.clearOpponent();
+
+    const points = this.generateOrbitPoints(params);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+    const material = new THREE.LineBasicMaterial({
+      color: 0xef5350,
+      transparent: true,
+      opacity: 0.7,
+      linewidth: 1,
+    });
+
+    this.opponentLine = new THREE.Line(geometry, material);
+    this.group.add(this.opponentLine);
+  }
+
   clearTarget(): void {
     if (this.targetLine) {
       this.group.remove(this.targetLine);
@@ -131,9 +152,18 @@ export class OrbitRenderer {
     }
   }
 
+  clearOpponent(): void {
+    if (this.opponentLine) {
+      this.group.remove(this.opponentLine);
+      this.opponentLine.geometry.dispose();
+      this.opponentLine = null;
+    }
+  }
+
   clearAll(): void {
     this.clearTarget();
     this.clearAchieved();
+    this.clearOpponent();
   }
 
   dispose(): void {

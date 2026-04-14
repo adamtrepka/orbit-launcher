@@ -14,9 +14,12 @@ import { HUD } from '../ui/HUD';
 import { ScorePanel } from '../ui/ScorePanel';
 import { kmToScene } from '../utils/constants';
 import { getOrbitHints } from '../orbits/OrbitHints';
+import { MultiplayerSession, RoundPhase } from '../multiplayer/MultiplayerSession';
+import { ConnectionState } from '../multiplayer/PeerConnection';
 import type { LaunchParams } from '../physics/LaunchSimulator';
 import type { OrbitParameters } from '../orbits/types';
 import type { ScoreBreakdown } from '../scoring/ScoreCalculator';
+
 
 /**
  * Thin orchestrator that wires GameEngine (pure logic) to Three.js rendering
@@ -53,6 +56,11 @@ export class Game {
     finalFuel: number;
   } | null = null;
 
+  // Multiplayer
+  private session: MultiplayerSession | null = null;
+  private opponentTrajectoryLine: THREE.Line | null = null;
+  private mpWaiting: HTMLElement;
+
   constructor(canvas: HTMLCanvasElement) {
     // Game engine (pure logic)
     this.engine = new GameEngine();
@@ -85,12 +93,16 @@ export class Game {
     this.launchPanel = new LaunchPanel();
     this.hud = new HUD();
     this.scorePanel = new ScorePanel();
+    this.mpWaiting = document.getElementById('mp-waiting')!;
 
     // Welcome screen
     this.setupWelcomeScreen();
 
     // Help button
     this.setupHelpButton();
+
+    // Multiplayer UI
+    this.setupMultiplayerUI();
 
     // Subscribe to engine events
     this.subscribeToEngine();
@@ -155,6 +167,7 @@ export class Game {
     this.orbitRenderer.clearAll();
     this.rocket.reset();
     this.clearGhost();
+    this.clearOpponentTrajectory();
     this.launchPanel.hide();
     this.hud.hide();
     this.scorePanel.hide();
@@ -178,6 +191,11 @@ export class Game {
 
     this.launchPanel.disable();
     this.clearGhost();
+
+    // In multiplayer, notify the opponent
+    if (this.isMultiplayer()) {
+      this.session!.sendLaunch(params);
+    }
 
     // Run the full simulation (this is the Three.js-dependent call)
     const result = simulateLaunch(params);
@@ -217,7 +235,8 @@ export class Game {
   private onScoreCalculated(breakdown: ScoreBreakdown, isNewBest: boolean, isValid: boolean): void {
     const mission = this.engine.getMission();
     const outcome = this.engine.getLastOutcome();
-    if (!mission || !outcome) return;
+    const params = this.engine.getLastParams();
+    if (!mission || !outcome || !params) return;
 
     this.hud.hide();
     this.launchPanel.hide();
@@ -236,16 +255,43 @@ export class Game {
     // Pull camera back to see both orbits
     this.zoomToFitOrbit();
 
+    // In multiplayer, send result to opponent and wait
+    if (this.isMultiplayer()) {
+      this.session!.sendResult(breakdown.totalScore, breakdown, params);
+
+      if (this.session!.getRoundPhase() !== RoundPhase.ROUND_COMPLETE) {
+        this.mpWaiting.classList.remove('hidden');
+      }
+    }
+
     // Show score panel (with small delay for drama)
     setTimeout(() => {
+      const retryFn = this.isMultiplayer() ? () => {} : () => this.engine.retryMission();
+      const nextFn = this.isMultiplayer()
+        ? () => {
+          this.clearOpponentTrajectory();
+          this.orbitRenderer.clearOpponent();
+          this.session!.nextRound();
+        }
+        : () => this.engine.newGame();
+
       this.scorePanel.show(
         mission.params,
         outcome.orbitalElements,
         breakdown,
         isNewBest,
-        () => this.engine.retryMission(),
-        () => this.engine.newGame(),
+        retryFn,
+        nextFn,
       );
+
+      // In multiplayer, hide retry button and wait for opponent
+      if (this.isMultiplayer()) {
+        // Hide retry (can't retry in multiplayer), relabel next
+        const retryBtn = document.getElementById('btn-retry')!;
+        retryBtn.classList.add('hidden');
+        const nextBtn = document.getElementById('btn-next')!;
+        nextBtn.textContent = 'NEXT ROUND';
+      }
     }, 800);
   }
 
@@ -346,6 +392,149 @@ export class Game {
         helpOverlay.classList.add('hidden');
       }
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multiplayer
+  // ---------------------------------------------------------------------------
+
+  private setupMultiplayerUI(): void {
+    const welcomePanel = document.getElementById('welcome-panel')!;
+    const mpDialog = document.getElementById('mp-dialog')!;
+    const mpStatus = document.getElementById('mp-status')!;
+    const mpBtn = document.getElementById('btn-multiplayer')!;
+    const createBtn = document.getElementById('btn-mp-create')!;
+    const joinBtn = document.getElementById('btn-mp-join')!;
+    const joinInput = document.getElementById('mp-join-code')! as HTMLInputElement;
+    const backBtn = document.getElementById('btn-mp-back')!;
+
+    mpBtn.addEventListener('click', () => {
+      welcomePanel.classList.add('hidden');
+      mpDialog.classList.remove('hidden');
+    });
+
+    backBtn.addEventListener('click', () => {
+      if (this.session) {
+        this.session.disconnect();
+        this.session = null;
+      }
+      mpDialog.classList.add('hidden');
+      mpStatus.classList.add('hidden');
+      welcomePanel.classList.remove('hidden');
+    });
+
+    createBtn.addEventListener('click', async () => {
+      this.session = new MultiplayerSession();
+      this.subscribeToSession();
+      try {
+        const code = await this.session.createRoom();
+        mpStatus.className = 'mp-status mp-status-waiting';
+        mpStatus.innerHTML = `
+          <div>Room created! Share this code:</div>
+          <div class="mp-room-code">${code}</div>
+          <div>Waiting for opponent...</div>
+        `;
+        mpStatus.classList.remove('hidden');
+        createBtn.classList.add('hidden');
+      } catch {
+        mpStatus.className = 'mp-status mp-status-error';
+        mpStatus.textContent = 'Failed to create room. Try again.';
+        mpStatus.classList.remove('hidden');
+      }
+    });
+
+    joinBtn.addEventListener('click', async () => {
+      const code = joinInput.value.trim().toUpperCase();
+      if (code.length < 4) return;
+      this.session = new MultiplayerSession();
+      this.subscribeToSession();
+      try {
+        mpStatus.className = 'mp-status mp-status-waiting';
+        mpStatus.textContent = 'Connecting...';
+        mpStatus.classList.remove('hidden');
+        await this.session.joinRoom(code);
+      } catch {
+        mpStatus.className = 'mp-status mp-status-error';
+        mpStatus.textContent = 'Failed to join room. Check the code and try again.';
+        mpStatus.classList.remove('hidden');
+      }
+    });
+  }
+
+  private subscribeToSession(): void {
+    if (!this.session) return;
+
+    this.session.on('connectionChanged', (e) => {
+      if (e.state === ConnectionState.DISCONNECTED && this.engine.getState() !== GameState.WELCOME) {
+        this.mpWaiting.classList.add('hidden');
+        // Could show a "disconnected" notification here
+      }
+    });
+
+    this.session.on('gameReady', (e) => {
+      const mpDialog = document.getElementById('mp-dialog')!;
+      mpDialog.classList.add('hidden');
+      this.scorePanel.resetForSinglePlayer(); // ensure clean state
+      this.engine.newGame(e.seed);
+    });
+
+    this.session.on('opponentLaunched', (e) => {
+      // Replay opponent's trajectory as a red line
+      this.renderOpponentTrajectory(e.params);
+    });
+
+    this.session.on('roundComplete', (e) => {
+      this.mpWaiting.classList.add('hidden');
+      const myScore = this.engine.getLastScore();
+      if (myScore) {
+        this.scorePanel.showOpponentScore(myScore.totalScore, e.opponent.score);
+        this.orbitRenderer.showOpponent(
+          this.computeOpponentOrbit(e.opponent.params),
+        );
+      }
+    });
+
+    this.session.on('opponentDisconnected', () => {
+      this.mpWaiting.classList.add('hidden');
+    });
+  }
+
+  /** Run the opponent's launch through physics and render the trajectory. */
+  private renderOpponentTrajectory(params: LaunchParams): void {
+    this.clearOpponentTrajectory();
+
+    const result = simulateLaunch(params);
+    const scenePoints = result.trajectory.map(
+      (p) => new THREE.Vector3(p.x * kmToScene(1), p.y * kmToScene(1), p.z * kmToScene(1))
+    );
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(scenePoints);
+    const material = new THREE.LineBasicMaterial({
+      color: 0xef5350,
+      transparent: true,
+      opacity: 0.35,
+    });
+
+    this.opponentTrajectoryLine = new THREE.Line(geometry, material);
+    this.sceneManager.scene.add(this.opponentTrajectoryLine);
+  }
+
+  /** Compute opponent's orbital elements from their params. */
+  private computeOpponentOrbit(params: LaunchParams): OrbitParameters {
+    const result = simulateLaunch(params);
+    return result.orbitalElements;
+  }
+
+  private clearOpponentTrajectory(): void {
+    if (this.opponentTrajectoryLine) {
+      this.sceneManager.scene.remove(this.opponentTrajectoryLine);
+      this.opponentTrajectoryLine.geometry.dispose();
+      this.opponentTrajectoryLine = null;
+    }
+  }
+
+  private isMultiplayer(): boolean {
+    return this.session !== null && this.session.getConnectionState() === ConnectionState.CONNECTED;
   }
 
   // ---------------------------------------------------------------------------

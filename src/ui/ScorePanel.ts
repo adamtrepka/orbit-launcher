@@ -14,6 +14,8 @@ export class ScorePanel {
   private nextBtn: HTMLElement;
   private dismissBtn: HTMLElement;
   private showScoreBtn: HTMLElement;
+  private scoreTitle: HTMLElement;
+  private opponentScoreDiv: HTMLElement;
 
   private onRetry: (() => void) | null = null;
   private onNext: (() => void) | null = null;
@@ -27,6 +29,8 @@ export class ScorePanel {
     this.nextBtn = document.getElementById('btn-next')!;
     this.dismissBtn = document.getElementById('btn-dismiss-score')!;
     this.showScoreBtn = document.getElementById('btn-show-score')!;
+    this.scoreTitle = document.getElementById('score-title')!;
+    this.opponentScoreDiv = document.getElementById('mp-opponent-score')!;
 
     this.retryBtn.addEventListener('click', () => {
       if (this.onRetry) this.onRetry();
@@ -97,8 +101,50 @@ export class ScorePanel {
   hide(): void {
     this.panel.classList.add('hidden');
     this.showScoreBtn.classList.add('hidden');
+    this.opponentScoreDiv.classList.add('hidden');
+    this.scoreTitle.textContent = 'MISSION COMPLETE';
     this.onRetry = null;
     this.onNext = null;
+  }
+
+  /**
+   * Show the opponent's score in multiplayer mode.
+   * Call this after show() to overlay opponent results.
+   */
+  showOpponentScore(myScore: number, opponentScore: number): void {
+    let resultLabel: string;
+    let resultClass: string;
+
+    if (myScore > opponentScore + 0.5) {
+      resultLabel = 'YOU WIN!';
+      resultClass = 'mp-result-win';
+    } else if (opponentScore > myScore + 0.5) {
+      resultLabel = 'YOU LOSE';
+      resultClass = 'mp-result-lose';
+    } else {
+      resultLabel = 'DRAW';
+      resultClass = 'mp-result-draw';
+    }
+
+    this.scoreTitle.textContent = 'ROUND COMPLETE';
+    this.opponentScoreDiv.innerHTML = `
+      <div class="mp-opponent-label">OPPONENT SCORE</div>
+      <div class="mp-opponent-value">${Math.round(opponentScore)}</div>
+      <div class="mp-result-label ${resultClass}">${resultLabel}</div>
+    `;
+    this.opponentScoreDiv.classList.remove('hidden');
+
+    // In multiplayer, hide retry (both must play same mission), relabel next
+    this.retryBtn.classList.add('hidden');
+    this.nextBtn.textContent = 'NEXT ROUND';
+  }
+
+  /** Reset multiplayer-specific UI for single-player mode. */
+  resetForSinglePlayer(): void {
+    this.retryBtn.classList.remove('hidden');
+    this.nextBtn.textContent = 'NEXT MISSION';
+    this.opponentScoreDiv.classList.add('hidden');
+    this.scoreTitle.textContent = 'MISSION COMPLETE';
   }
 
   private buildComparison(target: OrbitParameters, achieved: OrbitParameters): string {

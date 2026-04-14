@@ -155,6 +155,63 @@ architecture that makes it pluggable later.
 
 ---
 
+## Phase 3: Multiplayer Implementation — COMPLETED
+
+**Goal:** Real-time spectating multiplayer using PeerJS (WebRTC P2P). Two players
+get the same seed, play the same mission, exchange LaunchParams, replay
+opponent's trajectory locally, compare scores side-by-side.
+
+### Transport: PeerJS (WebRTC)
+
+Added `peerjs` as the only new runtime dependency (~50KB). PeerJS wraps WebRTC
+data channels and provides a free cloud signaling server. After signaling,
+all game data flows P2P — no backend needed.
+
+### New Files
+
+- **`src/multiplayer/PeerConnection.ts`** — Wraps PeerJS `Peer` and `DataConnection`.
+  Manages room creation (6-char code), joining, and serialized `GameMessage` exchange.
+  Emits typed events for connection state changes and incoming messages.
+
+- **`src/multiplayer/MultiplayerSession.ts`** — Multiplayer game coordinator.
+  Sits on top of PeerConnection and GameEngine. Tracks both players' launch status,
+  coordinates round completion, emits events for opponent actions.
+
+### Multiplayer Flow
+
+1. Player A clicks MULTIPLAYER → CREATE ROOM → gets 6-char code (e.g. `K7X4WP`)
+2. Player B clicks MULTIPLAYER → enters code → JOIN
+3. PeerJS establishes WebRTC data channel (P2P)
+4. Host sends `GAME_START` with random seed
+5. Both clients call `engine.newGame(seed)` → identical missions (seeded RNG)
+6. Both see briefing, accept, set up sliders independently
+7. Player launches → `LAUNCH` message (5 numbers) sent to opponent
+8. Opponent's client runs `simulateLaunch(opponentParams)` locally → red trajectory
+9. When player finishes → `RESULT` message with score + breakdown sent
+10. When both results received → `roundComplete` → show side-by-side scores + WIN/LOSE/DRAW
+11. NEXT ROUND → host generates next seed, cycle repeats
+
+### Modified Files
+
+| File | Changes |
+|------|---------|
+| `Game.ts` | Added `MultiplayerSession` integration, opponent trajectory rendering, multiplayer-aware score flow, room UI wiring |
+| `OrbitRenderer.ts` | Added `showOpponent()` / `clearOpponent()` for red opponent orbit ring |
+| `ScorePanel.ts` | Added `showOpponentScore()` with WIN/LOSE/DRAW label, `resetForSinglePlayer()` |
+| `index.html` | Added multiplayer button, room dialog (create/join), waiting overlay, opponent score div |
+| `style.css` | Added MP dialog, room code display, join input, waiting overlay, opponent score styles |
+| `package.json` | Added `peerjs` runtime dependency |
+
+### What's NOT included (future improvements)
+
+- Lobby / matchmaking (currently need to share room code out-of-band)
+- Reconnection after disconnect
+- Spectator mode (third-party watching)
+- Round counter / best-of-N series with aggregate scoring
+- Player names / avatars
+
+---
+
 ## Future Gameplay Ideas (Post Phase 1 & 2)
 
 These are additional features to consider after the foundation is in place.
@@ -212,5 +269,7 @@ These are additional features to consider after the foundation is in place.
 | Architecture | Extract GameEngine (no DOM/Three.js) | Clean separation enables Worker, server, and multiplayer use |
 | RNG | Seeded PRNG (mulberry32) | Same seed = same missions; critical for fair multiplayer |
 | Network layer | Deferred (not in Phase 2) | Build the pluggable architecture first, pick transport later |
+| Multiplayer transport | PeerJS (WebRTC P2P) | Only 1 new dep (~50KB), free signaling, no backend to deploy, stays fully client-side |
+| Room codes | 6-char alphanumeric (no I/O/0/1) | Short enough to share verbally, unambiguous characters |
 | Implementation order | Arcade controls -> Architecture refactor | Immediate playability improvement first, then structural cleanup |
 | Physics boundary | Orchestrator calls sim, feeds result to engine | Avoids refactoring LaunchSimulator away from THREE.Vector3; engine stays pure |

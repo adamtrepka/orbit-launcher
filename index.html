@@ -31,7 +31,31 @@
           </div>
           <div class="welcome-tip">TIP: The gold ring is your target orbit. The blue ghost line is your predicted trajectory. Match them!</div>
         </div>
-        <button id="btn-start-game" class="btn-primary btn-launch">START GAME</button>
+        <button id="btn-start-game" class="btn-primary btn-launch">SOLO PLAY</button>
+        <button id="btn-multiplayer" class="btn-secondary" style="margin-top:10px;width:100%;padding:12px 0;letter-spacing:2px;">MULTIPLAYER</button>
+      </div>
+
+      <!-- Multiplayer Dialog -->
+      <div id="mp-dialog" class="panel hidden">
+        <h1>MULTIPLAYER</h1>
+        <div class="mp-dialog-content">
+          <p class="mp-description">Play the same mission as a friend. Both get identical orbits from a shared seed — compare trajectories and scores!</p>
+          <div class="mp-actions-col">
+            <button id="btn-mp-create" class="btn-primary" style="width:100%;">CREATE ROOM</button>
+            <div class="mp-divider">OR</div>
+            <div class="mp-join-row">
+              <input id="mp-join-code" type="text" placeholder="ROOM CODE" maxlength="6" class="mp-input" />
+              <button id="btn-mp-join" class="btn-primary" style="padding:10px 20px;">JOIN</button>
+            </div>
+          </div>
+          <div id="mp-status" class="mp-status hidden"></div>
+        </div>
+        <button id="btn-mp-back" class="btn-secondary" style="width:100%;margin-top:16px;">BACK</button>
+      </div>
+
+      <!-- Multiplayer Waiting Overlay -->
+      <div id="mp-waiting" class="mp-waiting hidden">
+        <div class="mp-waiting-text">Waiting for opponent to launch...</div>
       </div>
 
       <!-- Briefing Panel -->
@@ -65,10 +89,11 @@
       <!-- Score Panel -->
       <div id="score-panel" class="panel hidden">
         <button id="btn-dismiss-score" class="btn-dismiss" title="Hide score to watch orbit">&times;</button>
-        <h1>MISSION COMPLETE</h1>
+        <h1 id="score-title">MISSION COMPLETE</h1>
         <div id="score-orbit-comparison"></div>
         <div id="score-breakdown"></div>
         <div id="score-total"></div>
+        <div id="mp-opponent-score" class="mp-opponent-score hidden"></div>
         <div class="score-actions">
           <button id="btn-retry" class="btn-secondary">RETRY</button>
           <button id="btn-next" class="btn-primary">NEXT MISSION</button>
