@@ -3,9 +3,10 @@ import { SUN_DIRECTION } from '../utils/constants';
 import { fbm3 } from '../utils/noise';
 import type { PlanetConfig, SurfaceLayer } from './planetTypes';
 
-/** Texture resolution for procedurally generated maps. */
-const TEX_WIDTH = 1024;
-const TEX_HEIGHT = 512;
+/** Texture resolution for procedurally generated maps — reduced on mobile for performance. */
+const IS_MOBILE = typeof window !== 'undefined' && window.innerWidth <= 600;
+const TEX_WIDTH = IS_MOBILE ? 512 : 1024;
+const TEX_HEIGHT = IS_MOBILE ? 256 : 512;
 
 /**
  * Procedurally generated planet with canvas-based diffuse + bump textures,

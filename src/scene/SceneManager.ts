@@ -60,13 +60,23 @@ export class SceneManager {
 
     this.clock = new THREE.Clock();
 
-    // Resize handler
-    window.addEventListener('resize', this.onResize.bind(this));
+    // Resize handler — use visualViewport for mobile address bar accuracy
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', this.onResize.bind(this));
+    } else {
+      window.addEventListener('resize', this.onResize.bind(this));
+    }
+    // Also handle orientation changes explicitly for mobile
+    window.addEventListener('orientationchange', () => {
+      // Delay to let the browser finish layout after orientation change
+      setTimeout(() => this.onResize(), 150);
+    });
   }
 
   onResize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const vv = window.visualViewport;
+    const w = vv ? vv.width : window.innerWidth;
+    const h = vv ? vv.height : window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);

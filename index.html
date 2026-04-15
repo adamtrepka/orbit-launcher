@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Orbit Launcher</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -27,12 +27,12 @@
             <h3>CONTROLS</h3>
             <div class="welcome-slider-item"><span class="ws-name">Direction</span> <span class="ws-desc">Compass heading. East → low inclination, North/South → polar orbits.</span></div>
             <div class="welcome-slider-item"><span class="ws-name">Altitude</span> <span class="ws-desc">How high to place the satellite. Match this to the mission target.</span></div>
-            <div class="welcome-slider-item" style="font-size:11px;color:#888;border-bottom:none;padding-top:10px;">Switch to <strong style="color:#ffd54f;">PRO mode</strong> in the launch panel for 3 more sliders: Elevation, Thrust, and Injection Altitude.</div>
+            <div class="welcome-slider-item welcome-slider-note">Switch to <strong class="ws-name">PRO mode</strong> in the launch panel for 3 more sliders: Elevation, Thrust, and Injection Altitude.</div>
           </div>
           <div class="welcome-tip">TIP: The gold ring is your target orbit. The blue ghost line is your predicted trajectory. Match them!</div>
         </div>
         <button id="btn-start-game" class="btn-primary btn-launch">SOLO PLAY</button>
-        <button id="btn-multiplayer" class="btn-secondary" style="margin-top:10px;width:100%;padding:12px 0;letter-spacing:2px;">MULTIPLAYER</button>
+        <button id="btn-multiplayer" class="btn-secondary btn-welcome-mp">MULTIPLAYER</button>
       </div>
 
       <!-- Multiplayer Dialog -->
@@ -41,16 +41,16 @@
         <div class="mp-dialog-content">
           <p class="mp-description">Play the same mission as a friend. Both get identical orbits from a shared seed — compare trajectories and scores!</p>
           <div class="mp-actions-col">
-            <button id="btn-mp-create" class="btn-primary" style="width:100%;">CREATE ROOM</button>
+            <button id="btn-mp-create" class="btn-primary btn-mp-create-full">CREATE ROOM</button>
             <div class="mp-divider">OR</div>
             <div class="mp-join-row">
               <input id="mp-join-code" type="text" placeholder="ROOM CODE" maxlength="6" class="mp-input" />
-              <button id="btn-mp-join" class="btn-primary" style="padding:10px 20px;">JOIN</button>
+              <button id="btn-mp-join" class="btn-primary btn-mp-join-compact">JOIN</button>
             </div>
           </div>
           <div id="mp-status" class="mp-status hidden"></div>
         </div>
-        <button id="btn-mp-back" class="btn-secondary" style="width:100%;margin-top:16px;">BACK</button>
+        <button id="btn-mp-back" class="btn-secondary btn-mp-back-full">BACK</button>
       </div>
 
       <!-- Multiplayer Waiting Overlay -->
