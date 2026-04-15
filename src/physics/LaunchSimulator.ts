@@ -515,5 +515,24 @@ export function simulateGhost(params: LaunchParams): THREE.Vector3[] {
     if (alt < -10) break;
   }
 
+  // Trace one full orbit from the post-burn state so the ghost shows
+  // the resulting orbit ring (comparable to the yellow target).
+  const energy = vel.lengthSq() / 2 - MU / pos.length();
+  if (energy < 0) {
+    const a = -MU / (2 * energy);
+    const period = 2 * Math.PI * Math.sqrt(a * a * a / MU);
+    const coastDt = 30.0;
+    const coastSteps = Math.min(Math.ceil(period / coastDt), 2000);
+
+    for (let i = 0; i < coastSteps; i++) {
+      const r = pos.length();
+      const gravMag = -MU / (r * r);
+      const grav = pos.clone().normalize().multiplyScalar(gravMag);
+      vel.add(grav.clone().multiplyScalar(coastDt));
+      pos.add(vel.clone().multiplyScalar(coastDt));
+      trajectory.push(pos.clone());
+    }
+  }
+
   return trajectory;
 }
