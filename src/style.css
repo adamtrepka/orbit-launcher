@@ -1022,53 +1022,61 @@ input[type="range"]::-moz-range-thumb {
    All touch-friendly, layout, and font-size overrides for phones.
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 600px) {
-  /* ── Touch-friendly slider thumbs (44px minimum) ── */
+  /* ── Slider thumbs: slightly larger than desktop, not giant ── */
   input[type="range"] {
-    height: 8px;
+    height: 6px;
     touch-action: none;
   }
 
   input[type="range"]::-webkit-slider-thumb {
-    width: 44px;
-    height: 44px;
+    width: 28px;
+    height: 28px;
   }
 
   input[type="range"]::-moz-range-thumb {
-    width: 44px;
-    height: 44px;
+    width: 28px;
+    height: 28px;
   }
 
-  /* ── Touch-friendly buttons (44px minimum tap target) ── */
+  /* ── Buttons: comfortable tap targets ── */
   .btn-primary, .btn-secondary {
-    min-height: 44px;
+    min-height: 40px;
     font-size: 13px;
-    padding: 12px 20px;
+    padding: 10px 20px;
   }
 
   .btn-launch {
-    font-size: 16px;
-    padding: 14px 32px;
+    font-size: 15px;
+    padding: 12px 28px;
   }
 
   .btn-dismiss {
-    width: 44px;
-    height: 44px;
-    font-size: 22px;
-  }
-
-  .btn-help {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     font-size: 20px;
   }
 
-  .mode-btn {
-    padding: 10px 0;
-    font-size: 11px;
-    min-height: 44px;
+  .btn-help {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
-  /* ── Launch Panel: bottom sheet on mobile ── */
+  .mode-btn {
+    padding: 8px 0;
+    font-size: 11px;
+    min-height: 36px;
+  }
+
+  .mode-toggle {
+    margin-bottom: 8px;
+  }
+
+  .slider-header {
+    margin-bottom: 2px;
+  }
+
+  /* ── Launch Panel: compact bottom sheet on mobile ── */
   #launch-panel {
     position: absolute;
     top: auto;
@@ -1076,9 +1084,9 @@ input[type="range"]::-moz-range-thumb {
     bottom: 0;
     left: 0;
     width: 100%;
-    max-height: 55vh;
+    max-height: 42vh;
     border-radius: 12px 12px 0 0;
-    padding: 16px 16px 24px;
+    padding: 12px 16px 16px;
     animation: slideUp 0.3s ease-out;
   }
 
@@ -1087,37 +1095,49 @@ input[type="range"]::-moz-range-thumb {
   }
 
   #launch-panel h2 {
-    font-size: 13px;
-    margin-bottom: 10px;
+    font-size: 12px;
+    margin-bottom: 6px;
   }
 
   .slider-group {
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
 
   .slider-label {
-    font-size: 12px;
+    font-size: 10px;
   }
 
   .slider-value {
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .slider-hint {
-    font-size: 11px;
+    font-size: 10px;
+    margin-top: 1px;
   }
 
   .orbit-hints {
-    font-size: 12px;
-    padding: 8px 10px;
+    font-size: 11px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
   }
 
   .orbit-hints .hints-title {
-    font-size: 11px;
+    font-size: 10px;
+    margin-bottom: 3px;
   }
 
   .inclination-readout {
-    font-size: 14px;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  .launch-timer {
+    margin-bottom: 8px;
+  }
+
+  .launch-actions {
+    margin-top: 10px;
   }
 
   /* ── HUD: horizontal strip at top on mobile ── */
@@ -1324,13 +1344,13 @@ input[type="range"]::-moz-range-thumb {
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 900px) and (min-width: 601px) {
   input[type="range"]::-webkit-slider-thumb {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
   }
 
   input[type="range"]::-moz-range-thumb {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
   }
 
   #launch-panel {
