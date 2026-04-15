@@ -356,6 +356,8 @@ input[type="range"]::-moz-range-thumb {
   transform: translate(-50%, -50%);
   width: 500px;
   max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
   animation: fadeIn 0.5s ease-out;
 }
 
