@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overscroll-behavior: none;
+}
+
 body {
   overflow: hidden;
   background: #000;
@@ -11,6 +15,9 @@ body {
   color: #e0e0e0;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  position: fixed;
+  width: 100%;
+  height: 100%;
 }
 
 #game-canvas {
@@ -269,18 +276,19 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
+  height: 8px;
   background: rgba(80, 160, 255, 0.2);
-  border-radius: 2px;
+  border-radius: 4px;
   outline: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   background: #6ab7ff;
   border-radius: 50%;
   cursor: pointer;
@@ -293,8 +301,8 @@ input[type="range"]::-webkit-slider-thumb:active {
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   background: #6ab7ff;
   border-radius: 50%;
   cursor: pointer;
