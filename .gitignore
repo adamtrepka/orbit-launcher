@@ -27,3 +27,6 @@ dist-ssr
 nul
 Thumbs.db
 Desktop.ini
+
+# AI tooling
+.opencode/
