@@ -1,4 +1,5 @@
 import type { PlanetType } from '../scene/planetTypes';
+import type { DifficultyMutator } from '../game/Mutators';
 
 export const OrbitType = {
   LEO: 'LEO',
@@ -52,6 +53,8 @@ export interface TargetOrbit {
   params: OrbitParameters;
   /** Visual planet type for the central body this round. */
   planetType: PlanetType;
+  /** Active difficulty mutators for this mission. */
+  mutators: DifficultyMutator[];
 }
 
 export const ControlMode = {

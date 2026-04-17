@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { EARTH_RADIUS, MU } from '../utils/constants';
+import { computeMutatorForces } from '../game/Mutators';
 import type { OrbitParameters } from '../orbits/types';
+import type { DifficultyMutator } from '../game/Mutators';
 
 export interface SimState {
   /** Position in km (Earth-centered) */
@@ -182,7 +184,7 @@ type Phase = (typeof Phase)[keyof typeof Phase];
  *   - Thrust 50-62% → circFraction decreases linearly → partial circ → elliptical
  *   - Thrust ≥62% → circFraction=0.0 → no circularization → fully elliptical
  */
-export function simulateLaunch(params: LaunchParams): {
+export function simulateLaunch(params: LaunchParams, mutators?: DifficultyMutator[]): {
   trajectory: THREE.Vector3[];
   finalState: SimState;
   orbitalElements: OrbitParameters;
@@ -369,6 +371,14 @@ export function simulateLaunch(params: LaunchParams): {
     const integrateDt = phase === Phase.FINAL_COAST ? finalCoastDt : dt;
     vel.add(grav.clone().multiplyScalar(integrateDt));
     vel.add(thrust.clone().multiplyScalar(integrateDt));
+
+    // Apply mutator forces (atmospheric drag, lunar gravity, solar wind, etc.)
+    const activeMutators = mutators ?? [];
+    if (activeMutators.length > 0) {
+      const mutatorAccel = computeMutatorForces(activeMutators, pos, vel, alt, time);
+      vel.add(mutatorAccel.multiplyScalar(integrateDt));
+    }
+
     pos.add(vel.clone().multiplyScalar(integrateDt));
 
     time += integrateDt;
@@ -398,7 +408,7 @@ export function simulateLaunch(params: LaunchParams): {
  * Quick simulation for ghost trajectory preview.
  * Same physics model but larger time steps and fewer points.
  */
-export function simulateGhost(params: LaunchParams): THREE.Vector3[] {
+export function simulateGhost(params: LaunchParams, mutators?: DifficultyMutator[]): THREE.Vector3[] {
   const maxSteps = 6000;
   const trajectory: THREE.Vector3[] = [];
 
@@ -508,6 +518,14 @@ export function simulateGhost(params: LaunchParams): THREE.Vector3[] {
     // Integrate
     vel.add(grav.clone().multiplyScalar(dt));
     vel.add(thrust.clone().multiplyScalar(dt));
+
+    // Apply mutator forces
+    const activeMutators = mutators ?? [];
+    if (activeMutators.length > 0) {
+      const mutatorAccel = computeMutatorForces(activeMutators, pos, vel, alt, time);
+      vel.add(mutatorAccel.multiplyScalar(dt));
+    }
+
     pos.add(vel.clone().multiplyScalar(dt));
 
     time += dt;
@@ -526,10 +544,20 @@ export function simulateGhost(params: LaunchParams): THREE.Vector3[] {
 
     for (let i = 0; i < coastSteps; i++) {
       const r = pos.length();
+      const alt = r - EARTH_RADIUS;
       const gravMag = -MU / (r * r);
       const grav = pos.clone().normalize().multiplyScalar(gravMag);
       vel.add(grav.clone().multiplyScalar(coastDt));
+
+      // Apply mutator forces during coast too
+      const coastMutators = mutators ?? [];
+      if (coastMutators.length > 0) {
+        const mutatorAccel = computeMutatorForces(coastMutators, pos, vel, alt, time);
+        vel.add(mutatorAccel.multiplyScalar(coastDt));
+      }
+
       pos.add(vel.clone().multiplyScalar(coastDt));
+      time += coastDt;
       trajectory.push(pos.clone());
     }
   }

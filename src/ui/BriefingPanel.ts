@@ -1,6 +1,7 @@
 import { formatNumber } from '../utils/math';
 import { getBestScore } from '../scoring/HighScores';
 import { PLANET_CONFIGS } from '../scene/planetTypes';
+import { getCombinedScoreMultiplier } from '../game/Mutators';
 import type { TargetOrbit } from '../orbits/types';
 
 /**
@@ -63,12 +64,48 @@ export class BriefingPanel {
     const bestText = best !== null ? ` | BEST: ${best}` : '';
     this.difficulty.textContent = `DIFFICULTY: ${def.difficulty}${bestText}`;
 
+    // Active mutators display
+    this.renderMutators(target);
+
     this.panel.classList.remove('hidden');
   }
 
   hide(): void {
     this.panel.classList.add('hidden');
     this.onAccept = null;
+  }
+
+  private renderMutators(target: TargetOrbit): void {
+    // Remove any previous mutator container
+    const existing = this.panel.querySelector('.briefing-mutators');
+    if (existing) existing.remove();
+
+    if (target.mutators.length === 0) return;
+
+    const container = document.createElement('div');
+    container.className = 'briefing-mutators';
+
+    const header = document.createElement('div');
+    header.className = 'mutators-header';
+    const multiplier = getCombinedScoreMultiplier(target.mutators);
+    header.textContent = `ACTIVE MODIFIERS (${multiplier.toFixed(1)}x score)`;
+    container.appendChild(header);
+
+    for (const mutator of target.mutators) {
+      const badge = document.createElement('div');
+      badge.className = 'mutator-badge';
+      badge.innerHTML = `
+        <span class="mutator-icon">${mutator.icon}</span>
+        <span class="mutator-info">
+          <span class="mutator-name">${mutator.name}</span>
+          <span class="mutator-desc">${mutator.description}</span>
+        </span>
+      `;
+      container.appendChild(badge);
+    }
+
+    // Insert after difficulty badge
+    this.difficulty.insertAdjacentElement('afterend', container);
   }
 
   private paramItem(label: string, value: string, unit: string): string {

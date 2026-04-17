@@ -18,6 +18,8 @@ import { HUD } from '../ui/HUD';
 import { ScorePanel } from '../ui/ScorePanel';
 import { kmToScene } from '../utils/constants';
 import { getOrbitHints } from '../orbits/OrbitHints';
+import { getEffectiveTimer } from './Mutators';
+import { MutatorType } from './Mutators';
 import { MultiplayerSession, RoundPhase } from '../multiplayer/MultiplayerSession';
 import { ConnectionState } from '../multiplayer/PeerConnection';
 import type { LaunchParams } from '../physics/LaunchSimulator';
@@ -61,6 +63,10 @@ export class Game {
     orbitalElements: OrbitParameters;
     finalFuel: number;
   } | null = null;
+
+  // Moving target mutator state
+  private movingTargetInterval: number = 0;
+  private originalParams: OrbitParameters | null = null;
 
   // Multiplayer
   private session: MultiplayerSession | null = null;
@@ -214,6 +220,7 @@ export class Game {
     this.launchPanel.disable();
     this.launchPanel.stopTimer();
     this.clearGhost();
+    this.stopMovingTarget();
 
     // In multiplayer, notify all other players
     if (this.isMultiplayer()) {
@@ -221,7 +228,7 @@ export class Game {
     }
 
     // Run the full simulation (this is the Three.js-dependent call)
-    const result = simulateLaunch(params);
+    const result = simulateLaunch(params, mission.mutators);
 
     this.launchTrajectory = result.trajectory;
     this.launchAnimIndex = 0;
@@ -364,8 +371,15 @@ export class Game {
       mission,
     );
 
-    // Start 30-second countdown — auto-launches with current params on expiry
-    this.launchPanel.startTimer(30, doLaunch);
+    // Show active mutator indicators
+    this.hud.showMutators(mission.mutators);
+
+    // Start countdown — apply mutator timer override if present
+    const timerDuration = getEffectiveTimer(mission.mutators, 30);
+    this.launchPanel.startTimer(timerDuration, doLaunch);
+
+    // Moving target: drift the target orbit params during setup
+    this.startMovingTargetIfActive(mission);
   }
 
   private onRetrySetup(): void {
@@ -406,8 +420,9 @@ export class Game {
       mission,
     );
 
-    // Start 30-second countdown
-    this.launchPanel.startTimer(30, doLaunch);
+    // Start countdown with mutator timer override
+    const retryTimer = getEffectiveTimer(mission.mutators, 30);
+    this.launchPanel.startTimer(retryTimer, doLaunch);
   }
 
   // ---------------------------------------------------------------------------
@@ -651,6 +666,56 @@ export class Game {
   }
 
   // ---------------------------------------------------------------------------
+  // Moving target mutator
+  // ---------------------------------------------------------------------------
+
+  private startMovingTargetIfActive(mission: { mutators: import('./Mutators').DifficultyMutator[]; params: OrbitParameters }): void {
+    this.stopMovingTarget();
+
+    const hasMovingTarget = mission.mutators.some((m) => m.id === MutatorType.MOVING_TARGET);
+    if (!hasMovingTarget) return;
+
+    // Save original params for drift calculation
+    this.originalParams = { ...mission.params };
+    let elapsed = 0;
+
+    this.movingTargetInterval = window.setInterval(() => {
+      elapsed += 0.5; // 500ms ticks
+      const driftScale = Math.sin(elapsed * 0.3) * 0.05; // +-5% drift
+
+      // Drift altitude
+      if (this.originalParams) {
+        const altDrift = this.originalParams.altitude * driftScale;
+        mission.params.altitude = this.originalParams.altitude + altDrift;
+
+        if (this.originalParams.perigee !== undefined && mission.params.perigee !== undefined) {
+          mission.params.perigee = this.originalParams.perigee + altDrift * 0.7;
+        }
+        if (this.originalParams.apogee !== undefined && mission.params.apogee !== undefined) {
+          mission.params.apogee = this.originalParams.apogee + altDrift * 1.3;
+        }
+
+        // Drift inclination slightly
+        const incDrift = Math.sin(elapsed * 0.2 + 1.0) * 1.5;
+        mission.params.inclination = Math.max(0, Math.min(180,
+          this.originalParams.inclination + incDrift));
+
+        // Update the displayed target orbit
+        this.orbitRenderer.clearTarget();
+        this.orbitRenderer.showTarget(mission.params);
+      }
+    }, 500);
+  }
+
+  private stopMovingTarget(): void {
+    if (this.movingTargetInterval) {
+      clearInterval(this.movingTargetInterval);
+      this.movingTargetInterval = 0;
+    }
+    this.originalParams = null;
+  }
+
+  // ---------------------------------------------------------------------------
   // Ghost trajectory preview
   // ---------------------------------------------------------------------------
 
@@ -666,7 +731,9 @@ export class Game {
   private updateGhostTrajectory(params: LaunchParams): void {
     this.clearGhost();
 
-    const ghostPoints = simulateGhost(params);
+    const mission = this.engine.getMission();
+    const mutators = mission?.mutators ?? [];
+    const ghostPoints = simulateGhost(params, mutators);
     if (ghostPoints.length < 2) return;
 
     const flat = this.trajectoryToFlat(ghostPoints);

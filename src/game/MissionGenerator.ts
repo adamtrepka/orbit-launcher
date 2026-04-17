@@ -1,5 +1,6 @@
 import { getRandomOrbitDefinition } from '../orbits/OrbitDefinitions';
 import { PLANET_TYPE_KEYS } from '../scene/planetTypes';
+import { selectMutators } from './Mutators';
 import type { TargetOrbit } from '../orbits/types';
 import type { PlanetType } from '../scene/planetTypes';
 import type { SeededRandom } from '../utils/random';
@@ -20,5 +21,8 @@ export function generateMission(rng?: SeededRandom): TargetOrbit {
   const roll = nextFn ? nextFn() : Math.random();
   const planetType: PlanetType = PLANET_TYPE_KEYS[Math.floor(roll * PLANET_TYPE_KEYS.length)];
 
-  return { definition, params, planetType };
+  // Select difficulty mutators based on orbit difficulty
+  const mutators = selectMutators(definition.difficulty, nextFn);
+
+  return { definition, params, planetType, mutators };
 }

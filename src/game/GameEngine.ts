@@ -3,6 +3,7 @@ import { EventEmitter } from './GameEvents';
 import { generateMission } from './MissionGenerator';
 import { calculateScore } from '../scoring/ScoreCalculator';
 import { saveHighScore, getBestScore } from '../scoring/HighScores';
+import { getCombinedScoreMultiplier } from './Mutators';
 import { SeededRandom, randomSeed } from '../utils/random';
 import type { GameEventMap } from './GameEvents';
 import type { TargetOrbit, OrbitParameters } from '../orbits/types';
@@ -127,12 +128,14 @@ export class GameEngine extends EventEmitter<GameEventMap> {
       isFinite(achieved.eccentricity) &&
       achieved.eccentricity < 1;
 
-    // Calculate score
+    // Calculate score (with mutator multiplier)
+    const mutatorMultiplier = getCombinedScoreMultiplier(this.currentMission.mutators);
     const breakdown = calculateScore(
       this.currentMission.params,
       achieved,
       outcome.finalFuel,
       this.currentMission.definition.tolerances,
+      mutatorMultiplier,
     );
     this.lastScore = breakdown;
 

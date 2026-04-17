@@ -13,12 +13,14 @@ export interface ScoreBreakdown {
 /**
  * Calculate score by comparing achieved orbit to target.
  * Accuracy (60%) + Fuel efficiency (40%) = Total (0-100)
+ * Optional scoreMultiplier applies a bonus for active mutators.
  */
 export function calculateScore(
   target: OrbitParameters,
   achieved: OrbitParameters,
   fuelRemaining: number,
-  tolerances: { altitude: number; inclination: number; eccentricity: number }
+  tolerances: { altitude: number; inclination: number; eccentricity: number },
+  scoreMultiplier?: number,
 ): ScoreBreakdown {
   // Altitude comparison: use perigee/apogee for elliptical, altitude for circular
   let altError: number;
@@ -46,7 +48,7 @@ export function calculateScore(
   const accuracyScore = (altitudeScore + inclinationScore + eccentricityScore) / 3;
   const fuelScore = Math.max(0, Math.min(1, fuelRemaining));
 
-  const totalScore = (accuracyScore * 0.6 + fuelScore * 0.4) * 100;
+  const totalScore = (accuracyScore * 0.6 + fuelScore * 0.4) * 100 * (scoreMultiplier ?? 1.0);
 
   return {
     altitudeScore,
