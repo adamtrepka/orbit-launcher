@@ -5,6 +5,17 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import type { OrbitParameters } from '../orbits/types';
 import { EARTH_RADIUS, kmToScene } from '../utils/constants';
 
+/** Color palette for opponent orbits — each player gets a distinct color. */
+const OPPONENT_COLORS = [
+  0xef5350, // red
+  0x42a5f5, // blue
+  0xab47bc, // purple
+  0xffa726, // orange
+  0x26c6da, // cyan
+  0xec407a, // pink
+  0x8d6e63, // brown
+] as const;
+
 /**
  * Renders an orbit as a 3D ellipse around Earth using fat lines (Line2)
  * for high visibility on all displays.
@@ -13,11 +24,14 @@ export class OrbitRenderer {
   private group: THREE.Group;
   private targetLine: Line2 | null = null;
   private achievedLine: Line2 | null = null;
-  private opponentLine: Line2 | null = null;
+  private opponentLines: Map<string, Line2> = new Map();
   private parentScene: THREE.Scene;
 
   /** All active LineMaterials — updated on resize via setResolution(). */
   private materials: Set<LineMaterial> = new Set();
+
+  /** Counter for assigning colors to opponents. */
+  private colorIndex: number = 0;
 
   constructor(scene: THREE.Scene) {
     this.parentScene = scene;
@@ -140,14 +154,27 @@ export class OrbitRenderer {
   }
 
   /**
-   * Show the opponent's achieved orbit (multiplayer — red color).
+   * Show an opponent's achieved orbit.
+   * Each opponent gets a unique color from the palette.
    */
-  showOpponent(params: OrbitParameters): void {
-    this.clearOpponent();
+  showOpponent(params: OrbitParameters, playerId?: string): void {
+    const id = playerId ?? '_default';
+
+    // Clear existing orbit for this player if any
+    this.clearOpponentById(id);
+
+    const color = OPPONENT_COLORS[this.colorIndex % OPPONENT_COLORS.length];
+    this.colorIndex++;
 
     const points = this.generateOrbitPoints(params);
-    this.opponentLine = this.createFatLine(points, 0xef5350, 2, 0.75);
-    this.group.add(this.opponentLine);
+    const line = this.createFatLine(points, color, 2, 0.75);
+    this.opponentLines.set(id, line);
+    this.group.add(line);
+  }
+
+  /** Get the color for the next opponent (used for trajectory rendering). */
+  public getOpponentColor(index: number): number {
+    return OPPONENT_COLORS[index % OPPONENT_COLORS.length];
   }
 
   clearTarget(): void {
@@ -166,18 +193,35 @@ export class OrbitRenderer {
     }
   }
 
-  clearOpponent(): void {
-    if (this.opponentLine) {
-      this.group.remove(this.opponentLine);
-      this.disposeLine(this.opponentLine);
-      this.opponentLine = null;
+  /** Clear a specific opponent's orbit by player ID. */
+  clearOpponentById(playerId: string): void {
+    const line = this.opponentLines.get(playerId);
+    if (line) {
+      this.group.remove(line);
+      this.disposeLine(line);
+      this.opponentLines.delete(playerId);
     }
+  }
+
+  /** Clear all opponent orbits. Legacy name kept for backward compat. */
+  clearOpponent(): void {
+    this.clearAllOpponents();
+  }
+
+  /** Clear all opponent orbits. */
+  clearAllOpponents(): void {
+    for (const [id, line] of this.opponentLines) {
+      this.group.remove(line);
+      this.disposeLine(line);
+      this.opponentLines.delete(id);
+    }
+    this.colorIndex = 0;
   }
 
   clearAll(): void {
     this.clearTarget();
     this.clearAchieved();
-    this.clearOpponent();
+    this.clearAllOpponents();
   }
 
   dispose(): void {

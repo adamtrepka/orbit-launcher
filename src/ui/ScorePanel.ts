@@ -2,8 +2,17 @@ import type { OrbitParameters } from '../orbits/types';
 import type { ScoreBreakdown } from '../scoring/ScoreCalculator';
 import { formatNumber } from '../utils/math';
 
+/** Player entry for the leaderboard. */
+export interface LeaderboardEntry {
+  playerId: string;
+  name: string;
+  score: number | null;
+  connected: boolean;
+}
+
 /**
  * Score display panel shown after launch with comparison and breakdown.
+ * In multiplayer, also renders a live-updating leaderboard table.
  */
 export class ScorePanel {
   private panel: HTMLElement;
@@ -16,9 +25,14 @@ export class ScorePanel {
   private showScoreBtn: HTMLElement;
   private scoreTitle: HTMLElement;
   private opponentScoreDiv: HTMLElement;
+  private leaderboardDiv: HTMLElement;
 
   private onRetry: (() => void) | null = null;
   private onNext: (() => void) | null = null;
+
+  /** Current leaderboard entries, kept for live updates. */
+  private leaderboardEntries: LeaderboardEntry[] = [];
+  private localPlayerId: string = '';
 
   constructor() {
     this.panel = document.getElementById('score-panel')!;
@@ -31,6 +45,7 @@ export class ScorePanel {
     this.showScoreBtn = document.getElementById('btn-show-score')!;
     this.scoreTitle = document.getElementById('score-title')!;
     this.opponentScoreDiv = document.getElementById('mp-opponent-score')!;
+    this.leaderboardDiv = document.getElementById('mp-leaderboard')!;
 
     this.retryBtn.addEventListener('click', () => {
       if (this.onRetry) this.onRetry();
@@ -102,14 +117,167 @@ export class ScorePanel {
     this.panel.classList.add('hidden');
     this.showScoreBtn.classList.add('hidden');
     this.opponentScoreDiv.classList.add('hidden');
+    this.leaderboardDiv.classList.add('hidden');
     this.scoreTitle.textContent = 'MISSION COMPLETE';
+    this.leaderboardEntries = [];
+    this.localPlayerId = '';
     this.onRetry = null;
     this.onNext = null;
   }
 
   /**
-   * Show the opponent's score in multiplayer mode.
-   * Call this after show() to overlay opponent results.
+   * Initialize the multiplayer leaderboard with all players.
+   * Called once when the score panel is shown in multiplayer mode.
+   * Players without results yet show "Launching..." placeholder.
+   */
+  showLeaderboard(
+    entries: LeaderboardEntry[],
+    localPlayerId: string,
+  ): void {
+    this.leaderboardEntries = entries.map((e) => ({ ...e }));
+    this.localPlayerId = localPlayerId;
+    this.scoreTitle.textContent = 'ROUND COMPLETE';
+
+    // Hide old single-opponent display
+    this.opponentScoreDiv.classList.add('hidden');
+
+    // Hide retry in multiplayer, relabel next
+    this.retryBtn.classList.add('hidden');
+    this.nextBtn.textContent = 'NEXT ROUND';
+
+    this.renderLeaderboard();
+    this.leaderboardDiv.classList.remove('hidden');
+  }
+
+  /**
+   * Update a single player's score in the leaderboard.
+   * Called live as results arrive from other players.
+   */
+  updatePlayerResult(playerId: string, score: number): void {
+    const entry = this.leaderboardEntries.find((e) => e.playerId === playerId);
+    if (entry) {
+      entry.score = score;
+      this.renderLeaderboard();
+    }
+  }
+
+  /**
+   * Mark a player as disconnected in the leaderboard.
+   */
+  markPlayerDisconnected(playerId: string): void {
+    const entry = this.leaderboardEntries.find((e) => e.playerId === playerId);
+    if (entry) {
+      entry.connected = false;
+      this.renderLeaderboard();
+    }
+  }
+
+  /** Reset multiplayer-specific UI for single-player mode. */
+  resetForSinglePlayer(): void {
+    this.retryBtn.classList.remove('hidden');
+    this.nextBtn.textContent = 'NEXT MISSION';
+    this.opponentScoreDiv.classList.add('hidden');
+    this.leaderboardDiv.classList.add('hidden');
+    this.scoreTitle.textContent = 'MISSION COMPLETE';
+    this.leaderboardEntries = [];
+    this.localPlayerId = '';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaderboard rendering
+  // ---------------------------------------------------------------------------
+
+  private renderLeaderboard(): void {
+    // Sort: players with scores first (descending), then pending, then disconnected
+    const sorted = [...this.leaderboardEntries].sort((a, b) => {
+      // Disconnected without score goes last
+      if (!a.connected && a.score === null && b.connected) return 1;
+      if (!b.connected && b.score === null && a.connected) return -1;
+      // Players with scores rank above those without
+      if (a.score !== null && b.score === null) return -1;
+      if (a.score === null && b.score !== null) return 1;
+      // Both have scores — higher is better
+      if (a.score !== null && b.score !== null) return b.score - a.score;
+      return 0;
+    });
+
+    let rank = 0;
+    let lastScore: number | null = null;
+
+    let html = `
+      <div class="mp-leaderboard-title">LEADERBOARD</div>
+      <table class="mp-leaderboard-table">
+        <thead>
+          <tr><th>#</th><th>PLAYER</th><th>SCORE</th></tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const entry of sorted) {
+      // Calculate rank (same rank for tied scores)
+      if (entry.score !== null) {
+        if (entry.score !== lastScore) {
+          rank++;
+          lastScore = entry.score;
+        }
+      }
+
+      const isLocal = entry.playerId === this.localPlayerId;
+      const isDisconnected = !entry.connected;
+      const haScore = entry.score !== null;
+
+      let rowClass = '';
+      if (isLocal) rowClass += ' mp-leaderboard-row-local';
+      if (isDisconnected) rowClass += ' mp-leaderboard-row-disconnected';
+      if (!haScore && !isDisconnected) rowClass += ' mp-leaderboard-row-pending';
+
+      // Rank display
+      let rankDisplay = '';
+      if (haScore) {
+        const rankColorClass = rank <= 3 ? ` mp-leaderboard-rank-${rank}` : '';
+        rankDisplay = `<span class="${rankColorClass}">${rank}</span>`;
+      } else {
+        rankDisplay = '-';
+      }
+
+      // Score display
+      let scoreDisplay: string;
+      if (isDisconnected && !haScore) {
+        scoreDisplay = 'Left';
+      } else if (!haScore) {
+        scoreDisplay = 'Launching...';
+      } else {
+        const val = Math.round(entry.score!);
+        let scoreClass = 'mp-leaderboard-score-low';
+        if (val >= 80) scoreClass = 'mp-leaderboard-score-high';
+        else if (val >= 50) scoreClass = 'mp-leaderboard-score-mid';
+        scoreDisplay = `<span class="${scoreClass}">${val}</span>`;
+      }
+
+      // Name display
+      let nameDisplay = entry.name;
+      if (isLocal) nameDisplay += ' <span class="mp-lobby-player-you">(YOU)</span>';
+
+      html += `
+        <tr class="${rowClass.trim()}">
+          <td>${rankDisplay}</td>
+          <td>${nameDisplay}</td>
+          <td>${scoreDisplay}</td>
+        </tr>
+      `;
+    }
+
+    html += '</tbody></table>';
+    this.leaderboardDiv.innerHTML = html;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Legacy single-opponent display (kept for backward compatibility)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Show the opponent's score in multiplayer mode (legacy 1v1 display).
+   * @deprecated Use showLeaderboard() for multi-player.
    */
   showOpponentScore(myScore: number, opponentScore: number): void {
     let resultLabel: string;
@@ -139,13 +307,9 @@ export class ScorePanel {
     this.nextBtn.textContent = 'NEXT ROUND';
   }
 
-  /** Reset multiplayer-specific UI for single-player mode. */
-  resetForSinglePlayer(): void {
-    this.retryBtn.classList.remove('hidden');
-    this.nextBtn.textContent = 'NEXT MISSION';
-    this.opponentScoreDiv.classList.add('hidden');
-    this.scoreTitle.textContent = 'MISSION COMPLETE';
-  }
+  // ---------------------------------------------------------------------------
+  // Comparison and score row building
+  // ---------------------------------------------------------------------------
 
   private buildComparison(target: OrbitParameters, achieved: OrbitParameters): string {
     const targetRows = this.buildParamRows(target, 'TARGET');

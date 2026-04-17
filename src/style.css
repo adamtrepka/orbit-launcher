@@ -1017,6 +1017,160 @@ input[type="range"]::-moz-range-thumb {
 .mp-result-lose { color: #ef5350; }
 .mp-result-draw { color: #ffa726; }
 
+/* === Multiplayer Lobby === */
+.mp-lobby {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mp-lobby-header {
+  font-size: 11px;
+  color: #aaa;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.mp-lobby-players {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mp-lobby-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.mp-lobby-player-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #66bb6a;
+  flex-shrink: 0;
+}
+
+.mp-lobby-player-name {
+  color: #ddd;
+  flex: 1;
+}
+
+.mp-lobby-player-you {
+  font-size: 10px;
+  color: #ffd54f;
+  letter-spacing: 2px;
+}
+
+.mp-lobby-player-host {
+  font-size: 10px;
+  color: #42a5f5;
+  letter-spacing: 2px;
+}
+
+.btn-mp-start {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.mp-lobby-waiting {
+  text-align: center;
+  font-size: 12px;
+  color: #ffd54f;
+  letter-spacing: 1px;
+  padding: 8px 0;
+}
+
+/* === Multiplayer Leaderboard (in score panel) === */
+.mp-leaderboard {
+  margin-top: 12px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.mp-leaderboard-title {
+  font-size: 11px;
+  color: #aaa;
+  letter-spacing: 2px;
+  text-align: center;
+  padding: 10px 0 6px;
+}
+
+.mp-leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mp-leaderboard-table th {
+  font-size: 10px;
+  color: #777;
+  letter-spacing: 2px;
+  text-align: left;
+  padding: 4px 12px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-weight: normal;
+}
+
+.mp-leaderboard-table th:last-child {
+  text-align: right;
+}
+
+.mp-leaderboard-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #ccc;
+  transition: background 0.3s ease;
+}
+
+.mp-leaderboard-table td:first-child {
+  width: 32px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.mp-leaderboard-table td:last-child {
+  text-align: right;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-leaderboard-row-local td {
+  color: #fff;
+  background: rgba(255, 213, 79, 0.08);
+}
+
+.mp-leaderboard-row-pending td:last-child {
+  color: #555;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.mp-leaderboard-row-disconnected td {
+  color: #555;
+  text-decoration: line-through;
+}
+
+.mp-leaderboard-rank-1 { color: #ffd54f; }
+.mp-leaderboard-rank-2 { color: #b0bec5; }
+.mp-leaderboard-rank-3 { color: #ff8a65; }
+
+.mp-leaderboard-score-high { color: #66bb6a; }
+.mp-leaderboard-score-mid { color: #ffa726; }
+.mp-leaderboard-score-low { color: #ef5350; }
+
 /* ══════════════════════════════════════════════════════════════════
    MOBILE RESPONSIVE — max-width: 600px
    All touch-friendly, layout, and font-size overrides for phones.
@@ -1329,6 +1483,22 @@ input[type="range"]::-moz-range-thumb {
     right: 16px;
     transform: none;
     text-align: center;
+  }
+
+  /* ── Multiplayer Leaderboard ── */
+  .mp-leaderboard-table {
+    font-size: 12px;
+  }
+
+  .mp-leaderboard-table td,
+  .mp-leaderboard-table th {
+    padding: 6px 8px;
+  }
+
+  /* ── Multiplayer Lobby ── */
+  .mp-lobby-player {
+    font-size: 12px;
+    padding: 5px 8px;
   }
 }
 

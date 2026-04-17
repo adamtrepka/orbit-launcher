@@ -39,7 +39,7 @@
       <div id="mp-dialog" class="panel hidden">
         <h1>MULTIPLAYER</h1>
         <div class="mp-dialog-content">
-          <p class="mp-description">Play the same mission as a friend. Both get identical orbits from a shared seed — compare trajectories and scores!</p>
+          <p class="mp-description">Play the same mission with up to 8 players. Everyone gets identical orbits from a shared seed — compare trajectories and scores!</p>
           <div class="mp-actions-col">
             <button id="btn-mp-create" class="btn-primary btn-mp-create-full">CREATE ROOM</button>
             <div class="mp-divider">OR</div>
@@ -49,13 +49,19 @@
             </div>
           </div>
           <div id="mp-status" class="mp-status hidden"></div>
+          <div id="mp-lobby" class="mp-lobby hidden">
+            <div class="mp-lobby-header">PLAYERS IN ROOM</div>
+            <div id="mp-lobby-players" class="mp-lobby-players"></div>
+            <button id="btn-mp-start" class="btn-primary btn-mp-start hidden">START GAME</button>
+            <div id="mp-lobby-waiting" class="mp-lobby-waiting hidden">Waiting for host to start...</div>
+          </div>
         </div>
         <button id="btn-mp-back" class="btn-secondary btn-mp-back-full">BACK</button>
       </div>
 
       <!-- Multiplayer Waiting Overlay -->
       <div id="mp-waiting" class="mp-waiting hidden">
-        <div class="mp-waiting-text">Waiting for opponent to launch...</div>
+        <div class="mp-waiting-text">Waiting for others to launch...</div>
       </div>
 
       <!-- Briefing Panel -->
@@ -98,6 +104,7 @@
         <div id="score-breakdown"></div>
         <div id="score-total"></div>
         <div id="mp-opponent-score" class="mp-opponent-score hidden"></div>
+        <div id="mp-leaderboard" class="mp-leaderboard hidden"></div>
         <div class="score-actions">
           <button id="btn-retry" class="btn-secondary">RETRY</button>
           <button id="btn-next" class="btn-primary">NEXT MISSION</button>

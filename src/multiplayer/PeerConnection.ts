@@ -17,7 +17,9 @@ export type ConnectionState = (typeof ConnectionState)[keyof typeof ConnectionSt
 
 export interface PeerEventMap {
   stateChanged: { state: ConnectionState; error?: string };
-  message: { message: GameMessage };
+  message: { message: GameMessage; fromPeerId: string };
+  peerJoined: { peerId: string };
+  peerLeft: { peerId: string };
 }
 
 /** Prefix for PeerJS IDs so they don't collide with other apps. */
@@ -40,12 +42,14 @@ const PEER_OPTIONS = {
 /**
  * Wraps PeerJS for creating/joining rooms and exchanging GameMessages.
  *
- * One player "hosts" (creates a room with a code), the other "joins".
- * After connection, both sides use send() and subscribe to 'message' events.
+ * Supports up to 8 players using a star topology: the host accepts multiple
+ * connections and relays messages between joiners. Joiners only connect to
+ * the host. After connection, all sides use send()/broadcast() and subscribe
+ * to 'message' events.
  */
 export class PeerConnection extends EventEmitter<PeerEventMap> {
   private peer: Peer | null = null;
-  private conn: DataConnection | null = null;
+  private connections: Map<string, DataConnection> = new Map();
   private state: ConnectionState = ConnectionState.IDLE;
   private roomCode: string = '';
   private isHost: boolean = false;
@@ -63,9 +67,19 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
     return this.isHost;
   }
 
+  /** Number of active peer connections. */
+  public getConnectedCount(): number {
+    return this.connections.size;
+  }
+
+  /** IDs of all connected peers. */
+  public getConnectedPeerIds(): string[] {
+    return Array.from(this.connections.keys());
+  }
+
   /**
-   * Create a room and wait for an opponent to join.
-   * Returns the room code the opponent needs to enter.
+   * Create a room and wait for players to join.
+   * Returns the room code players need to enter.
    */
   public createRoom(): Promise<string> {
     this.roomCode = generateRoomCode();
@@ -85,8 +99,7 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
 
       this.peer.on('connection', (conn) => {
         console.log('[PeerConnection] Host: incoming connection from', conn.peer, 'open=', conn.open);
-        this.conn = conn;
-        this.setupConnection(conn);
+        this.setupHostConnection(conn);
       });
 
       this.peer.on('error', (err) => {
@@ -125,8 +138,7 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
           reliable: true,
           serialization: 'json',
         });
-        this.conn = conn;
-        this.setupConnection(conn);
+        this.setupJoinerConnection(conn);
 
         // Resolve once we reach CONNECTED state
         let unsub: (() => void) | null = null;
@@ -151,7 +163,7 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
             console.error('[PeerConnection] Joiner: connection timed out after', CONNECT_TIMEOUT_MS, 'ms');
             settled = true;
             unsub?.();
-            this.setState(ConnectionState.ERROR, 'Connection timed out — opponent may have left.');
+            this.setState(ConnectionState.ERROR, 'Connection timed out — host may have left.');
             reject(new Error('Connection timed out'));
           }
         }, CONNECT_TIMEOUT_MS);
@@ -173,19 +185,49 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
     });
   }
 
-  /** Send a GameMessage to the connected peer. */
+  /** Send a GameMessage to all connected peers (host broadcasts, joiner sends to host). */
+  public broadcast(message: GameMessage): void {
+    if (this.state !== ConnectionState.CONNECTED && this.state !== ConnectionState.WAITING) return;
+    for (const conn of this.connections.values()) {
+      if (conn.open) {
+        conn.send(message);
+      }
+    }
+  }
+
+  /** Send a GameMessage to a specific peer by ID. Host only. */
+  public sendTo(peerId: string, message: GameMessage): void {
+    const conn = this.connections.get(peerId);
+    if (conn && conn.open) {
+      conn.send(message);
+    }
+  }
+
+  /** Send a GameMessage to all connected peers. Alias for broadcast for backward compat. */
   public send(message: GameMessage): void {
-    if (!this.conn || this.state !== ConnectionState.CONNECTED) return;
-    this.conn.send(message);
+    this.broadcast(message);
+  }
+
+  /**
+   * Relay a message from one peer to all other peers. Host only.
+   * Optionally include the host's own message handler by re-emitting.
+   */
+  public relayToOthers(fromPeerId: string, message: GameMessage): void {
+    if (!this.isHost) return;
+    for (const [peerId, conn] of this.connections.entries()) {
+      if (peerId !== fromPeerId && conn.open) {
+        conn.send(message);
+      }
+    }
   }
 
   /** Tear down the connection and PeerJS instance. */
   public disconnect(): void {
     this.clearConnectTimeout();
-    if (this.conn) {
-      this.conn.close();
-      this.conn = null;
+    for (const conn of this.connections.values()) {
+      conn.close();
     }
+    this.connections.clear();
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
@@ -194,38 +236,85 @@ export class PeerConnection extends EventEmitter<PeerEventMap> {
   }
 
   /**
-   * Attach data/close/error listeners and transition to CONNECTED.
-   * Handles the race condition where the connection may already be open
-   * by the time this method is called (common on both host and joiner paths).
+   * Host side: set up a new incoming connection.
+   * The host can accept multiple joiners (star topology).
    */
-  private setupConnection(conn: DataConnection): void {
-    console.log('[PeerConnection] setupConnection: peer=', conn.peer, 'open=', conn.open, 'type=', conn.type);
+  private setupHostConnection(conn: DataConnection): void {
+    const peerId = conn.peer;
+    console.log('[PeerConnection] Host: setupHostConnection for', peerId);
 
     conn.on('data', (data) => {
-      this.emit('message', { message: data as GameMessage });
+      const message = data as GameMessage;
+      // Emit to the host's own handler
+      this.emit('message', { message, fromPeerId: peerId });
+      // Relay to all other connected peers (star topology)
+      this.relayToOthers(peerId, message);
     });
 
     conn.on('close', () => {
-      console.log('[PeerConnection] DataConnection closed');
+      console.log('[PeerConnection] Host: peer disconnected:', peerId);
+      this.connections.delete(peerId);
+      this.emit('peerLeft', { peerId });
+      if (this.connections.size === 0) {
+        this.setState(ConnectionState.WAITING);
+      }
+    });
+
+    conn.on('error', (err) => {
+      console.error('[PeerConnection] Host: connection error from', peerId, err.message);
+      this.connections.delete(peerId);
+      this.emit('peerLeft', { peerId });
+    });
+
+    const onOpen = (): void => {
+      console.log('[PeerConnection] Host: peer connected:', peerId);
+      this.connections.set(peerId, conn);
+      this.emit('peerJoined', { peerId });
+      // Transition to CONNECTED once we have at least one joiner
+      if (this.state === ConnectionState.WAITING) {
+        this.setState(ConnectionState.CONNECTED);
+      }
+    };
+
+    if (conn.open) {
+      onOpen();
+    } else {
+      conn.on('open', onOpen);
+    }
+  }
+
+  /**
+   * Joiner side: set up the single connection to the host.
+   */
+  private setupJoinerConnection(conn: DataConnection): void {
+    const peerId = conn.peer;
+    console.log('[PeerConnection] Joiner: setupConnection to host', peerId);
+
+    conn.on('data', (data) => {
+      this.emit('message', { message: data as GameMessage, fromPeerId: peerId });
+    });
+
+    conn.on('close', () => {
+      console.log('[PeerConnection] Joiner: connection to host closed');
+      this.connections.delete(peerId);
       this.setState(ConnectionState.DISCONNECTED);
     });
 
     conn.on('error', (err) => {
-      console.error('[PeerConnection] DataConnection error', err.message);
+      console.error('[PeerConnection] Joiner: connection error', err.message);
       this.setState(ConnectionState.ERROR, err.message);
     });
 
-    // Handle the open event — check if already open first to avoid
-    // missing the event when it fires before we attach the listener.
-    if (conn.open) {
-      console.log('[PeerConnection] DataConnection already open');
+    const onOpen = (): void => {
+      console.log('[PeerConnection] Joiner: connected to host');
+      this.connections.set(peerId, conn);
       this.setState(ConnectionState.CONNECTED);
+    };
+
+    if (conn.open) {
+      onOpen();
     } else {
-      console.log('[PeerConnection] Waiting for DataConnection open event...');
-      conn.on('open', () => {
-        console.log('[PeerConnection] DataConnection open event fired');
-        this.setState(ConnectionState.CONNECTED);
-      });
+      conn.on('open', onOpen);
     }
   }
 
